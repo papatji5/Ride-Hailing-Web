@@ -1,0 +1,445 @@
+﻿"use client";
+
+import { useEffect, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
+import { sendDriverLocation, joinRide, leaveRide } from "@/lib/rideSocket";
+
+function formatTime(value: Date | null) {
+  return value ? value.toLocaleTimeString() : "Never";
+}
+
+function decodePolyline(str: string) {
+  let index = 0;
+  const coordinates: [number, number][] = [];
+  let lat = 0;
+  let lng = 0;
+
+  while (index < str.length) {
+    let result = 0;
+    let shift = 0;
+    let b: number;
+    do {
+      b = str.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = result & 1 ? ~(result >> 1) : result >> 1;
+    lat += dlat;
+
+    result = 0;
+    shift = 0;
+    do {
+      b = str.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = result & 1 ? ~(result >> 1) : result >> 1;
+    lng += dlng;
+
+    coordinates.push([lng / 1e6, lat / 1e6]);
+  }
+
+  return coordinates;
+}
+
+export default function DriverLocationAutoTracker() {
+  const mapEl = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const targetMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const routeIdRef = useRef<string | null>(null);
+  const watchIdRef = useRef<number | null>(null);
+  const routeSourceId = "driver-nav-route";
+  const lastSentRef = useRef<string>("");
+  const [activeRideId, setActiveRideId] = useState<string | null>(null);
+  const [navTarget, setNavTarget] = useState<{ mode: "pickup" | "destination"; address: string } | null>(null);
+  const [targetCoords, setTargetCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState("Location detection is off.");
+  const [error, setError] = useState<string | null>(null);
+  const [lat, setLat] = useState<number | null>(null);
+  const [lng, setLng] = useState<number | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number } | null>(null);
+
+  async function pushLocation(nextLat: number, nextLng: number) {
+    const signature = `${nextLat.toFixed(6)},${nextLng.toFixed(6)}`;
+    if (lastSentRef.current === signature) return;
+    lastSentRef.current = signature;
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/driver/location", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat: nextLat, lng: nextLng }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "Unable to save location");
+
+      setUpdatedAt(new Date());
+      setStatus("Location saved.");
+
+      // Emit location via Socket.IO for live tracking
+      if (routeIdRef.current) {
+        sendDriverLocation(routeIdRef.current, nextLat, nextLng);
+      }
+
+      if (window.location.pathname === "/driver" && window.location.search.includes("error=")) {
+        window.history.replaceState({}, "", window.location.pathname + window.location.search);
+      }
+
+      if (routeIdRef.current && navTarget?.address) {
+        void focusOnRide(routeIdRef.current, navTarget.mode, navTarget.address, nextLat, nextLng);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save location.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function renderLocation(nextLat: number, nextLng: number) {
+    setLat(nextLat);
+    setLng(nextLng);
+    const map = mapRef.current;
+    if (map) {
+      markerRef.current?.remove();
+      markerRef.current = new mapboxgl.Marker({ color: "#22c55e" }).setLngLat([nextLng, nextLat]).addTo(map);
+      map.easeTo({ center: [nextLng, nextLat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
+      if (targetCoords) {
+        void drawRoute({ lat: nextLat, lng: nextLng }, targetCoords);
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!mapEl.current) return;
+    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+    const map = new mapboxgl.Map({
+      container: mapEl.current,
+      style: "mapbox://styles/mapbox/streets-v11",
+      center: [28.0473, -26.2041],
+      zoom: 12,
+    });
+    mapRef.current = map;
+
+    map.on("load", () => {
+      map.resize();
+    });
+
+    return () => {
+      markerRef.current?.remove();
+      targetMarkerRef.current?.remove();
+      if (map.getLayer("driver-nav-route-line")) map.removeLayer("driver-nav-route-line");
+      if (map.getSource(routeSourceId)) map.removeSource(routeSourceId);
+      map.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setError("Browser geolocation is not available.");
+      return;
+    }
+
+    const id = navigator.geolocation.watchPosition(
+      (position) => {
+        const nextLat = position.coords.latitude;
+        const nextLng = position.coords.longitude;
+        renderLocation(nextLat, nextLng);
+        setError(null);
+        setStatus(
+          position.coords.accuracy
+            ? `Location detected (accuracy ~${Math.round(position.coords.accuracy)}m)`
+            : "Location detected",
+        );
+
+        if (routeIdRef.current) {
+          sendDriverLocation(routeIdRef.current, nextLat, nextLng);
+          void pushLocation(nextLat, nextLng);
+        }
+      },
+      (err) => {
+        setError(err.message || "Unable to detect location.");
+        if (err.code === 1) setStatus("Location permission denied.");
+        else if (err.code === 2) setStatus("Location unavailable.");
+        else if (err.code === 3) setStatus("Location request timed out.");
+        else setStatus("Location detection failed.");
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+    );
+
+    watchIdRef.current = id;
+    return () => {
+      if (watchIdRef.current != null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let canceled = false;
+
+    const fetchActiveRide = async () => {
+      try {
+        const res = await fetch("/api/driver/active-ride");
+        const data = await res.json().catch(() => null);
+        if (canceled) return;
+
+        if (res.ok) {
+          if (data?.id) {
+            if (routeIdRef.current !== data.id) {
+              routeIdRef.current = data.id;
+              setActiveRideId(data.id);
+              joinRide(data.id, { role: "DRIVER" });
+            }
+          } else if (routeIdRef.current) {
+            leaveRide(routeIdRef.current);
+            routeIdRef.current = null;
+            setActiveRideId(null);
+          }
+        }
+      } catch (err) {
+        console.error("Unable to fetch active ride for driver location tracker", err);
+      }
+    };
+
+    fetchActiveRide();
+    const interval = window.setInterval(fetchActiveRide, 5000);
+    return () => {
+      canceled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (activeRideId) {
+        leaveRide(activeRideId);
+      }
+    };
+  }, [activeRideId]);
+
+  async function geocodeAddress(address: string) {
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+    const geoRes = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${token}&limit=1&country=za`,
+    );
+    const geo = await geoRes.json().catch(() => null);
+    const coords = geo?.features?.[0]?.center;
+    if (coords && coords.length === 2) {
+      return { lng: coords[0] as number, lat: coords[1] as number };
+    }
+    return null;
+  }
+
+  async function drawRoute(from: { lat: number; lng: number }, to: { lat: number; lng: number }) {
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=polyline6&access_token=${token}`;
+    const res = await fetch(url);
+    const json = await res.json().catch(() => null);
+    const route = json?.routes?.[0];
+    if (!route?.geometry) return;
+
+    const coords = decodePolyline(route.geometry);
+    const map = mapRef.current;
+    if (!map) return;
+
+    const geojson = {
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: coords },
+      properties: {},
+    } as const;
+
+    if (map.getLayer("driver-nav-route-line")) {
+      map.removeLayer("driver-nav-route-line");
+    }
+    if (map.getSource(routeSourceId)) {
+      map.removeSource(routeSourceId);
+    }
+
+    map.addSource(routeSourceId, {
+      type: "geojson",
+      data: geojson,
+    });
+    map.addLayer({
+      id: "driver-nav-route-line",
+      type: "line",
+      source: routeSourceId,
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: { "line-color": "#3b82f6", "line-width": 5, "line-opacity": 0.9 },
+    });
+
+    setRouteInfo({
+      distanceKm: Math.round((route.distance / 1000) * 10) / 10,
+      durationMin: Math.round((route.duration / 60) * 10) / 10,
+    });
+  }
+
+  async function getCurrentLocation(): Promise<{ lat: number; lng: number } | null> {
+    if (!navigator.geolocation) return null;
+
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({ lat: position.coords.latitude, lng: position.coords.longitude });
+        },
+        () => resolve(null),
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 },
+      );
+    });
+  }
+
+  async function focusOnRide(
+    rideId: string | null,
+    type: "pickup" | "destination",
+    address?: string | null,
+    driverLat?: number | null,
+    driverLng?: number | null,
+  ) {
+    if (!rideId) return;
+    routeIdRef.current = rideId;
+    joinRide(rideId, { role: 'DRIVER' });
+    try {
+      const targetAddress = address ?? new URLSearchParams(window.location.search).get(type === "pickup" ? "pickupAddress" : "destinationAddress");
+      if (!targetAddress) return;
+
+      const target = await geocodeAddress(targetAddress);
+      if (!target) return;
+
+      const map = mapRef.current;
+      if (!map) return;
+
+      targetMarkerRef.current?.remove();
+      targetMarkerRef.current = new mapboxgl.Marker({ color: type === "pickup" ? "#1E40AF" : "#10B981" })
+        .setLngLat([target.lng, target.lat])
+        .addTo(map);
+
+      setTargetCoords(target);
+
+      if (driverLat == null || driverLng == null) {
+        const currentLocation = await getCurrentLocation();
+        if (currentLocation) {
+          driverLat = currentLocation.lat;
+          driverLng = currentLocation.lng;
+        }
+      }
+
+      if (driverLat != null && driverLng != null) {
+        renderLocation(driverLat, driverLng);
+        await drawRoute({ lat: driverLat, lng: driverLng }, target);
+      } else {
+        map.easeTo({ center: [target.lng, target.lat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
+      }
+
+      setStatus(`${type === "pickup" ? "Pickup" : "Destination"} loaded: ${targetAddress}`);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("Error focusing on ride target", err);
+    }
+  }
+
+  useEffect(() => {
+    function onRideAccepted(e: any) {
+      const rideId = e?.detail?.rideId ?? new URLSearchParams(window.location.search).get("activeRideId");
+      const mode = e?.detail?.mode ?? "pickup";
+      const targetAddress = e?.detail?.address ?? new URLSearchParams(window.location.search).get("pickupAddress");
+      if (rideId) void focusOnRide(rideId, mode, targetAddress, lat, lng);
+    }
+
+    function onNavTarget(e: any) {
+      const rideId = e?.detail?.rideId;
+      const mode = e?.detail?.mode;
+      const targetAddress = e?.detail?.address;
+      if (rideId && mode && targetAddress) {
+        setNavTarget({ mode, address: targetAddress });
+        const ensureLocationAndFocus = async () => {
+          let currentLat = lat;
+          let currentLng = lng;
+          if (currentLat == null || currentLng == null) {
+            const currentLocation = await getCurrentLocation();
+            if (currentLocation) {
+              currentLat = currentLocation.lat;
+              currentLng = currentLocation.lng;
+              renderLocation(currentLat, currentLng);
+            }
+          }
+          void focusOnRide(rideId, mode, targetAddress, currentLat, currentLng);
+        };
+        void ensureLocationAndFocus();
+      }
+    }
+
+    window.addEventListener("rideAccepted", onRideAccepted);
+    window.addEventListener("driverNavTarget", onNavTarget);
+
+    const initialId = new URLSearchParams(window.location.search).get("activeRideId");
+    const initialPickup = new URLSearchParams(window.location.search).get("pickupAddress");
+    if (initialId && initialPickup) void focusOnRide(initialId, "pickup", initialPickup, lat, lng);
+
+    return () => {
+      window.removeEventListener("rideAccepted", onRideAccepted);
+      window.removeEventListener("driverNavTarget", onNavTarget);
+    };
+  }, [lat, lng]);
+
+  useEffect(() => {
+    if (!navTarget || !routeIdRef.current) return;
+    if (lat == null || lng == null) return;
+    void focusOnRide(routeIdRef.current, navTarget.mode, navTarget.address, lat, lng);
+  }, [navTarget, lat, lng]);
+
+  useEffect(() => {
+    if (lat == null || lng == null || !targetCoords) return;
+    void drawRoute({ lat, lng }, targetCoords);
+  }, [lat, lng, targetCoords]);
+
+  useEffect(() => {
+    return () => {
+      if (routeIdRef.current) {
+        leaveRide(routeIdRef.current);
+      }
+    };
+  }, []);
+
+  function detectAndSaveLocation() {
+    // Keep this function for compatibility, but automatic tracking is now enabled.
+    setStatus("Automatic GPS tracking is active.");
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+        <div ref={mapEl} className="h-[420px] w-full" />
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-white/3 p-4">
+        <div className="flex flex-col gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Driver location</h2>
+            <p className="text-sm text-slate-400">Automatic GPS tracking is enabled. Your location and route update live while driving.</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-slate-200">
+            <div>{status}</div>
+            <div className="text-xs text-slate-400">
+              {lat != null && lng != null ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : "Waiting for GPS..."}
+            </div>
+            {routeInfo ? (
+              <div className="text-xs text-cyan-300">
+                Route: {routeInfo.distanceKm.toFixed(1)} km • ETA {Math.max(1, Math.round(routeInfo.durationMin))} min
+              </div>
+            ) : null}
+            <div className="text-xs text-emerald-300">Last saved: {formatTime(updatedAt)}</div>
+            {saving ? <div className="text-xs text-cyan-300">Saving...</div> : null}
+            {error ? <div className="text-xs text-rose-400">{error}</div> : null}
+          </div>
+          <button type="button" className="btn btn-primary" disabled>
+            Automatic GPS tracking enabled
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

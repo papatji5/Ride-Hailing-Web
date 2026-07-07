@@ -1,0 +1,474 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
+import { getSocket } from "@/lib/socket";
+
+type Props = {
+  rideId: string;
+  pickupAddress: string;
+  currentDropoffAddress: string;
+  onUpdated: (updated: { dropoff_address: string }) => void;
+};
+
+type Point = { lng: number; lat: number };
+
+type Suggestion = { id: string; place_name: string; center: [number, number] };
+
+type FareBreakdown = {
+  fare: number;
+  breakdown: { base: number; distanceCharge: number; timeCharge: number };
+};
+
+const fareConfig = {
+  baseFare: 15,
+  perKm: 7,
+  perMinute: 1.5,
+  minFare: 35,
+  avgSpeedKmph: 35,
+  surge: 1,
+};
+
+function computeFare(distanceMeters: number | null, durationSeconds: number | null): FareBreakdown | null {
+  if (distanceMeters == null || durationSeconds == null) return null;
+  const km = distanceMeters / 1000;
+  const minutes = durationSeconds / 60;
+  const distanceCharge = fareConfig.perKm * km;
+  const timeCharge = fareConfig.perMinute * minutes;
+  const fare = Math.max(fareConfig.minFare, (fareConfig.baseFare + distanceCharge + timeCharge) * fareConfig.surge);
+  return {
+    fare,
+    breakdown: {
+      base: fareConfig.baseFare,
+      distanceCharge: Number(distanceCharge.toFixed(2)),
+      timeCharge: Number(timeCharge.toFixed(2)),
+    },
+  };
+}
+
+function formatMeters(value?: number | null) {
+  if (value == null) return "N/A";
+  if (value >= 1000) return `${(value / 1000).toFixed(2)} km`;
+  return `${Math.round(value)} m`;
+}
+
+function formatMinutes(value?: number | null) {
+  if (value == null) return "N/A";
+  return `${Math.round(value)} min`;
+}
+
+async function geocodeAddress(address: string): Promise<Point | null> {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+  if (!token) return null;
+  try {
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${token}&limit=1&country=za`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const feature = data?.features?.[0];
+    if (!feature) return null;
+    return { lng: feature.center[0], lat: feature.center[1] };
+  } catch {
+    return null;
+  }
+}
+
+async function reverseGeocodePoint(point: Point): Promise<string | null> {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+  if (!token) return null;
+  try {
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${point.lng},${point.lat}.json?access_token=${token}&limit=1&country=za`;
+    const res = await fetch(url);
+    const data = await res.json();
+    return data?.features?.[0]?.place_name ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchRoute(pickup: Point, dropoff: Point) {
+  const pickupPair = `${pickup.lng},${pickup.lat}`;
+  const dropoffPair = `${dropoff.lng},${dropoff.lat}`;
+  const res = await fetch(`/api/directions?pickup=${pickupPair}&dropoff=${dropoffPair}`);
+  const data = await res.json();
+  if (!res.ok || !data || typeof data.distance !== "number" || typeof data.duration !== "number") {
+    throw new Error(data?.error || "Unable to fetch route");
+  }
+  return data;
+}
+
+function createCarMarker(): HTMLElement {
+  const el = document.createElement("div");
+  el.style.width = "40px";
+  el.style.height = "40px";
+  el.style.display = "flex";
+  el.style.alignItems = "center";
+  el.style.justifyContent = "center";
+  el.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ef4444" width="32" height="32">
+      <path d="M5 11l1.5-4.5h11l1.5 4.5m-13 6h10v2H5z" stroke="white" stroke-width="1" fill="#ef4444"/>
+    </svg>
+  `;
+  return el;
+}
+
+export default function PassengerDestinationUpdater({ rideId, pickupAddress, currentDropoffAddress, onUpdated }: Props) {
+  const mapEl = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const pickupMarker = useRef<mapboxgl.Marker | null>(null);
+  const dropoffMarker = useRef<mapboxgl.Marker | null>(null);
+  const carMarker = useRef<mapboxgl.Marker | null>(null);
+  const suggestTimer = useRef<number | null>(null);
+
+  const [pickupPoint, setPickupPoint] = useState<Point | null>(null);
+  const [dropoffPoint, setDropoffPoint] = useState<Point | null>(null);
+  const [dropoffAddress, setDropoffAddress] = useState<string>(currentDropoffAddress);
+  const [query, setQuery] = useState<string>("");
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [routeDistance, setRouteDistance] = useState<number | null>(null);
+  const [routeDuration, setRouteDuration] = useState<number | null>(null);
+  const [fareEstimate, setFareEstimate] = useState<FareBreakdown | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!mapEl.current) return;
+
+    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+    const map = new mapboxgl.Map({
+      container: mapEl.current,
+      style: "mapbox://styles/mapbox/streets-v11",
+      center: [28.0473, -26.2041],
+      zoom: 12,
+    });
+    mapRef.current = map;
+
+    map.on("load", () => {
+      setMapLoaded(true);
+      if (!map.getSource("route")) {
+        map.addSource("route", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: [] } } });
+      }
+      if (!map.getLayer("route-line")) {
+        map.addLayer({
+          id: "route-line",
+          type: "line",
+          source: "route",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: { "line-color": "#22c55e", "line-width": 5, "line-opacity": 0.9 },
+        });
+      }
+    });
+
+    map.on("click", (e: any) => {
+      const point = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+      setDropoffPoint(point);
+      setDropoffAddress("Resolving address...");
+      setStatusMessage("Selected new destination on the map.");
+    });
+
+    return () => {
+      pickupMarker.current?.remove();
+      dropoffMarker.current?.remove();
+      carMarker.current?.remove();
+      map.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pickupAddress) return;
+    let canceled = false;
+    setMapError(null);
+    geocodeAddress(pickupAddress)
+      .then((point) => {
+        if (canceled) return;
+        if (!point) {
+          setMapError("Unable to locate pickup address on the map.");
+          return;
+        }
+        setPickupPoint(point);
+      })
+      .catch(() => setMapError("Unable to geocode pickup address."));
+    return () => {
+      canceled = true;
+    };
+  }, [pickupAddress]);
+
+  useEffect(() => {
+    if (!currentDropoffAddress) return;
+    let canceled = false;
+    reverseGeocodeForAddress(currentDropoffAddress);
+    async function reverseGeocodeForAddress(address: string) {
+      const point = await geocodeAddress(address);
+      if (canceled) return;
+      if (!point) {
+        setMapError("Unable to locate current destination on the map.");
+        return;
+      }
+      setDropoffPoint(point);
+    }
+    return () => {
+      canceled = true;
+    };
+  }, [currentDropoffAddress]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+
+    if (pickupPoint) {
+      pickupMarker.current?.remove();
+      pickupMarker.current = new mapboxgl.Marker({ color: "#22c55e" })
+        .setLngLat([pickupPoint.lng, pickupPoint.lat])
+        .addTo(map);
+    }
+
+    if (dropoffPoint) {
+      dropoffMarker.current?.remove();
+      dropoffMarker.current = new mapboxgl.Marker({ color: "#0ea5e9" })
+        .setLngLat([dropoffPoint.lng, dropoffPoint.lat])
+        .addTo(map);
+    }
+
+    // Fit bounds to include all relevant points
+    const bounds = new mapboxgl.LngLatBounds();
+    if (driverLocation) {
+      bounds.extend([driverLocation.lng, driverLocation.lat]);
+    }
+    if (pickupPoint) {
+      bounds.extend([pickupPoint.lng, pickupPoint.lat]);
+    }
+    if (dropoffPoint) {
+      bounds.extend([dropoffPoint.lng, dropoffPoint.lat]);
+    }
+    
+    if (bounds.getNorthEast() && bounds.getSouthWest()) {
+      map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+    }
+  }, [pickupPoint, dropoffPoint, driverLocation]);
+
+  useEffect(() => {
+    if (!dropoffPoint) return;
+    let canceled = false;
+    reverseGeocodePoint(dropoffPoint)
+      .then((address) => {
+        if (canceled) return;
+        if (address) setDropoffAddress(address);
+      })
+      .catch(() => {
+        if (!canceled) return;
+        setDropoffAddress(currentDropoffAddress);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [dropoffPoint, currentDropoffAddress]);
+
+  useEffect(() => {
+    if (!dropoffPoint || !mapLoaded) return;
+    let canceled = false;
+    setRouteDistance(null);
+    setRouteDuration(null);
+    setFareEstimate(null);
+    setMapError(null);
+
+    // Use driver location if available, otherwise use pickup point
+    const startPoint = driverLocation ? { lat: driverLocation.lat, lng: driverLocation.lng } : pickupPoint;
+    if (!startPoint) return;
+
+    fetchRoute(startPoint, dropoffPoint)
+      .then((data) => {
+        if (canceled) return;
+        setRouteDistance(data.distance);
+        setRouteDuration(data.duration);
+        const fare = computeFare(data.distance, data.duration);
+        setFareEstimate(fare);
+        if (mapRef.current?.getSource("route")) {
+          const source = mapRef.current.getSource("route") as mapboxgl.GeoJSONSource;
+          source.setData({ type: "Feature", geometry: data.geometry });
+        }
+      })
+      .catch((error) => {
+        if (canceled) return;
+        setMapError(error instanceof Error ? error.message : String(error));
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [driverLocation, dropoffPoint, pickupPoint, mapLoaded]);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setSuggestions([]);
+      return;
+    }
+
+    if (suggestTimer.current) clearTimeout(suggestTimer.current);
+    setLoadingSuggestions(true);
+
+    suggestTimer.current = window.setTimeout(async () => {
+      try {
+        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+        if (!token) return;
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=5&country=za`;
+        const res = await fetch(url);
+        const data = await res.json();
+        setSuggestions(data?.features ?? []);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setLoadingSuggestions(false);
+      }
+    }, 300);
+
+    return () => {
+      if (suggestTimer.current) clearTimeout(suggestTimer.current);
+    };
+  }, [query]);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleDriverLocation = (data: any) => {
+      if (data.rideId === rideId && typeof data.lat === "number" && typeof data.lng === "number") {
+        setDriverLocation({ lat: data.lat, lng: data.lng });
+
+        const map = mapRef.current;
+        if (!map) return;
+
+        if (carMarker.current) {
+          carMarker.current.setLngLat([data.lng, data.lat]);
+        } else {
+          const carEl = createCarMarker();
+          carMarker.current = new mapboxgl.Marker(carEl)
+            .setLngLat([data.lng, data.lat])
+            .addTo(map);
+        }
+      }
+    };
+
+    socket.on("driver-location", handleDriverLocation);
+
+    return () => {
+      socket.off("driver-location", handleDriverLocation);
+    };
+  }, [rideId]);
+
+  const selectSuggestion = async (suggestion: Suggestion) => {
+    const point = { lng: suggestion.center[0], lat: suggestion.center[1] };
+    setDropoffPoint(point);
+    setDropoffAddress(suggestion.place_name);
+    setQuery("");
+    setSuggestions([]);
+    setStatusMessage("Selected destination from search.");
+  };
+
+  const handleSave = async () => {
+    if (!dropoffPoint || !dropoffAddress) {
+      setStatusMessage("Select a new destination on the map first.");
+      return;
+    }
+    if (!fareEstimate) {
+      setStatusMessage("Wait until the new price is calculated.");
+      return;
+    }
+
+    setSaving(true);
+    setStatusMessage(null);
+    try {
+      const res = await fetch("/api/passenger/update-destination", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rideId, dropoff_address: dropoffAddress }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Unable to update destination.");
+      }
+      onUpdated(data);
+      setStatusMessage("Destination updated. New price applied.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-4 text-sm text-slate-200">
+      <h3 className="mb-3 text-lg font-semibold text-white">Update destination on map</h3>
+      <div className="grid gap-3 lg:grid-cols-[1.25fr_0.9fr]">
+        <div className="min-h-[360px] rounded-xl overflow-hidden border border-white/10 bg-slate-900" ref={mapEl} />
+
+        <div className="space-y-3">
+          <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+            <div className="text-xs uppercase tracking-wide text-slate-400">Pickup</div>
+            <div className="mt-2 font-medium text-white">{pickupAddress}</div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+            <div className="text-xs uppercase tracking-wide text-slate-400">Search destination</div>
+            <div className="mt-2">
+              <input
+                className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500"
+                placeholder="Type an address or place"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search destination"
+              />
+              {loadingSuggestions ? <div className="mt-2 text-xs text-slate-400">Searching...</div> : null}
+              {suggestions.length > 0 ? (
+                <ul className="mt-2 max-h-48 overflow-auto rounded-md border border-white/10 bg-slate-900 p-1 text-sm">
+                  {suggestions.map((suggestion) => (
+                    <li
+                      key={suggestion.id}
+                      className="cursor-pointer rounded px-2 py-1 hover:bg-white/5 text-slate-300 hover:text-white"
+                      onClick={() => selectSuggestion(suggestion)}
+                    >
+                      {suggestion.place_name}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+            <div className="text-xs uppercase tracking-wide text-slate-400">Selected destination</div>
+            <div className="mt-2 font-medium text-white">{dropoffAddress || "Click on the map or search for a new destination"}</div>
+            <div className="mt-2 text-xs text-slate-400">Click any point on the map or search above to choose a new destination.</div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+            <div className="text-xs uppercase tracking-wide text-slate-400">New fare estimate</div>
+            <div className="mt-2 text-white text-lg">
+              {fareEstimate ? `R ${fareEstimate.fare.toFixed(2)}` : "Select a destination"}
+            </div>
+            {fareEstimate ? (
+              <div className="mt-2 text-xs text-slate-400">
+                Distance: {formatMeters(routeDistance)} • ETA: {formatMinutes(routeDuration)}
+              </div>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !dropoffPoint || !fareEstimate}
+            className="rounded-full bg-gradient-to-r from-blue-600 to-cyan-400 px-4 py-2 text-sm font-semibold text-white"
+          >
+            {saving ? "Saving destination..." : "Save new destination"}
+          </button>
+          {statusMessage ? (
+            <div className="text-sm text-slate-300">{statusMessage}</div>
+          ) : null}
+          {mapError ? <div className="text-sm text-rose-400">{mapError}</div> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
