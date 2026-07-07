@@ -150,7 +150,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
     map.on("load", () => {
       setMapLoaded(true);
       if (!map.getSource("route")) {
-        map.addSource("route", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: [] } } });
+        map.addSource("route", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } } });
       }
       if (!map.getLayer("route-line")) {
         map.addLayer({
@@ -288,7 +288,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
         setFareEstimate(fare);
         if (mapRef.current?.getSource("route")) {
           const source = mapRef.current.getSource("route") as mapboxgl.GeoJSONSource;
-          source.setData({ type: "Feature", geometry: data.geometry });
+          source.setData({ type: "Feature", properties: {}, geometry: data.geometry });
         }
       })
       .catch((error) => {
