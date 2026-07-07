@@ -191,6 +191,29 @@ export default function RideChat({ rideId }: { rideId: string }) {
     } catch {}
   }, [rideId]);
 
+  // Stronger mitigation: capture focus events and prevent any focus landing
+  // inside the chat container (runs during capture phase so it fires early).
+  useEffect(() => {
+    const handler = (e: FocusEvent) => {
+      try {
+        const target = e.target as Node | null;
+        if (containerRef.current && target && containerRef.current.contains(target)) {
+          try {
+            // prevent focus and blur the element immediately
+            (target as HTMLElement).blur?.();
+            e.stopImmediatePropagation?.();
+            e.preventDefault?.();
+            // eslint-disable-next-line no-console
+            console.log('RideChat DEBUG: intercepted focusin and blurred target', (target as HTMLElement).tagName, (target as HTMLElement).id);
+          } catch {}
+        }
+      } catch {}
+    };
+
+    window.addEventListener('focusin', handler, true);
+    return () => window.removeEventListener('focusin', handler, true);
+  }, [rideId]);
+
   // Scroll mitigation: if the browser restored scroll into the chat area on refresh,
   // move the viewport back to the top shortly after mount. Runs once per mount.
   useEffect(() => {
