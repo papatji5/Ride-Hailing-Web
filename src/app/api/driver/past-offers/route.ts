@@ -4,6 +4,25 @@ import { requireRole } from "@/lib/auth/require";
 
 export const dynamic = "force-dynamic";
 
+type RideSummary = {
+  id: string;
+  pickup_address: string | null;
+  dropoff_address: string | null;
+  status: string;
+  estimated_fare_cents: number | null;
+  final_fare_cents: number | null;
+  completed_at?: string | null;
+};
+
+type RideOfferSummary = {
+  id: string;
+  ride_id: string | null;
+  status: string;
+  sent_at: string | null;
+  responded_at: string | null;
+  expires_at: string | null;
+};
+
 export async function GET(req: Request) {
   try {
     const user = await requireRole("DRIVER");
@@ -43,8 +62,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: offersError.message }, { status: 500 });
     }
 
-    const rideIds = Array.from(new Set((offers ?? []).map((offer: any) => offer.ride_id).filter(Boolean)));
-    let rides = [];
+    const rideIds = Array.from(
+      new Set(
+        (offers ?? [])
+          .map((offer: RideOfferSummary) => offer.ride_id)
+          .filter((rideId): rideId is string => Boolean(rideId)),
+      ),
+    );
+
+    let rides: RideSummary[] = [];
     if (rideIds.length > 0) {
       const { data: ridesData, error: ridesError } = await supabase
         .from("rides")
