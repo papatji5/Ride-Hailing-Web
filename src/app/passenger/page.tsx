@@ -152,7 +152,7 @@ export default async function PassengerPage(props: PassengerPageProps) {
       {/* Client-side socket listeners and active ride display */}
       {activeRide ? (
         <>
-          <PassengerActiveRide rides={rides} driver={activeDriver} vehicle={activeVehicle} />
+          <PassengerActiveRide rides={rides ?? []} driver={activeDriver} vehicle={activeVehicle} />
           <PassengerRideSockets rideIds={[activeRide.id]} />
         </>
       ) : null}
