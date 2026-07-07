@@ -8,7 +8,29 @@ type ChatMessage = {
   sender_name: string | null;
   sender_role: string | null;
   created_at: string;
+  display_time?: string;
 };
+
+function normalizeMessage(raw: any, index: number): ChatMessage | null {
+  if (!raw) return null;
+
+  const text = String(raw.text ?? raw.message ?? raw.body ?? "").trim();
+  if (!text) return null;
+
+  const senderName = raw.sender_name ?? raw.fromLabel ?? raw.from ?? null;
+  const senderRole = raw.sender_role ?? (raw.from === "you" || raw.fromLabel === "You" ? "YOU" : null);
+  const rawTime = raw.created_at ?? raw.timestamp;
+  const createdAt = typeof rawTime === "string" && !Number.isNaN(Date.parse(rawTime)) ? rawTime : new Date().toISOString();
+
+  return {
+    id: String(raw.id ?? `${createdAt}-${index}`),
+    text,
+    sender_name: senderName,
+    sender_role: senderRole,
+    created_at: createdAt,
+    display_time: typeof raw.timestamp === "string" ? raw.timestamp : undefined,
+  };
+}
 
 async function fetchRideMessages(rideId: string): Promise<ChatMessage[]> {
   const response = await fetch(`/api/rides/${rideId}/messages`, { credentials: "include" });
@@ -58,7 +80,10 @@ export default function RideChat({ rideId }: { rideId: string }) {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          setMessages(parsed);
+          const normalized = parsed.map((item, index) => normalizeMessage(item, index)).filter(Boolean) as ChatMessage[];
+          if (normalized.length > 0) {
+            setMessages(normalized);
+          }
         }
       }
     } catch {
@@ -70,7 +95,7 @@ export default function RideChat({ rideId }: { rideId: string }) {
         const serverMessages = await fetchRideMessages(rideId);
         if (canceled) return;
 
-        setMessages(serverMessages);
+        setMessages(serverMessages.map((message, index) => normalizeMessage(message, index)).filter(Boolean) as ChatMessage[]);
         setError(null);
         setLastSyncedAt(new Date());
       } catch (syncError) {
@@ -128,7 +153,7 @@ export default function RideChat({ rideId }: { rideId: string }) {
     try {
       await sendRideMessage(rideId, text);
       const refreshedMessages = await fetchRideMessages(rideId);
-      setMessages(refreshedMessages);
+      setMessages(refreshedMessages.map((message, index) => normalizeMessage(message, index)).filter(Boolean) as ChatMessage[]);
       setLastSyncedAt(new Date());
     } catch (sendError) {
       setMessages((prev) => prev.filter((message) => message.id !== optimisticMessage.id));
@@ -164,6 +189,7 @@ export default function RideChat({ rideId }: { rideId: string }) {
           messages.map((message) => {
             const isYou = message.sender_role === "YOU" || message.sender_name === "You";
             const label = isYou ? "You" : message.sender_name ?? message.sender_role ?? "Other";
+            const timeLabel = message.display_time ?? new Date(message.created_at).toLocaleTimeString();
             return (
               <div key={message.id} className={`flex ${isYou ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[75%] ${isYou ? "text-right" : "text-left"}`}>
@@ -176,7 +202,7 @@ export default function RideChat({ rideId }: { rideId: string }) {
                         <div className="whitespace-pre-wrap break-words">{message.text}</div>
                       </div>
                       <div className="text-xs text-slate-400 mt-1">
-                        {label} • {new Date(message.created_at).toLocaleTimeString()}
+                        {label} • {timeLabel}
                       </div>
                     </div>
                   </div>
