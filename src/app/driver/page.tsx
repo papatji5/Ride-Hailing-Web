@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 type DriverPageProps = {
-  searchParams?: Promise<{ msg?: string; error?: string }>;
+  searchParams?: Promise<{ msg?: string; error?: string; tab?: string }>;
 };
 
 async function initDriverAction() {
