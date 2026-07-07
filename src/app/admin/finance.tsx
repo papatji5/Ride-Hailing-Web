@@ -12,7 +12,7 @@ export default async function AdminFinance() {
       <div className="card">
         <h2>Finance</h2>
         <div className="alert">
-          {String(envError.message)}
+          {envError instanceof Error ? envError.message : String(envError)}
         </div>
       </div>
     );
