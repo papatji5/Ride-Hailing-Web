@@ -54,7 +54,7 @@ export async function POST(req: Request) {
           amount_cents: amount,
           status: 'PAID',
           paid_at: new Date().toISOString(),
-        }, { onConflict: ['provider_reference'] });
+        }, { onConflict: 'provider_reference' });
       } catch (e) {
         // ignore
       }
