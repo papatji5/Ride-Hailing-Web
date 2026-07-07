@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 
 async function getCurrentUser() {
   const authClient = await createClient();
@@ -15,7 +15,7 @@ async function getCurrentUser() {
   return { user };
 }
 
-async function getRideForParticipant(supabase: ReturnType<typeof createServiceRoleClient>, rideId: string, userId: string) {
+async function getRideForParticipant(supabase: any, rideId: string, userId: string) {
   const { data: ride, error } = await supabase
     .from("rides")
     .select("id,passenger_id,driver_id,status,pickup_address,dropoff_address")
@@ -46,7 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: context.error }, { status: context.status });
     }
 
-    const supabase = createServiceRoleClient();
+    const supabase = await createClient();
     const rideContext = await getRideForParticipant(supabase, rideId, context.user.id);
     if ("error" in rideContext) {
       return NextResponse.json({ error: rideContext.error }, { status: rideContext.status });
@@ -88,7 +88,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: context.error }, { status: context.status });
     }
 
-    const supabase = createServiceRoleClient();
+    const supabase = await createClient();
     const rideContext = await getRideForParticipant(supabase, rideId, context.user.id);
     if ("error" in rideContext) {
       return NextResponse.json({ error: rideContext.error }, { status: rideContext.status });
