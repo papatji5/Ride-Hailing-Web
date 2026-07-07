@@ -55,8 +55,8 @@ export async function POST(req: Request) {
     if (paymentMethod === "CASH") {
       emitRealtimeEvent("rideRequested", {
         rideId: data.id,
-        pickupAddress,
-        dropoffAddress,
+        pickupAddress: pickup_address,
+        dropoffAddress: dropoff_address,
         passengerEmail: user.email ?? null,
         estimatedFareCents: estimated_fare_cents ?? null,
       });
