@@ -1,5 +1,4 @@
-import { requireRole } from "@/lib/auth/require";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 import { emitRealtimeEvent } from "@/lib/realtimeEvents";
 import Stripe from "stripe";
 
@@ -21,8 +20,7 @@ export async function POST(req: Request) {
     }
 
     const stripe = new Stripe(stripeKey);
-    const user = await requireRole("PASSENGER");
-    const supabase = await createClient();
+    const supabase = createServiceRoleClient();
 
     const { sessionId, rideId: requestRideId } = await req.json();
 
@@ -37,10 +35,19 @@ export async function POST(req: Request) {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     const rideId = requestRideId || session?.metadata?.ride_id;
+    const passengerUserId = session?.metadata?.user_id ?? null;
+    const passengerEmail = session?.customer_details?.email ?? session?.metadata?.user_email ?? null;
 
     if (!rideId) {
       return new Response(
         JSON.stringify({ error: "Missing rideId and Stripe session metadata did not contain ride_id" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!passengerUserId) {
+      return new Response(
+        JSON.stringify({ error: "Stripe session did not include a passenger user id" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
@@ -61,7 +68,7 @@ export async function POST(req: Request) {
         .from("rides")
         .update({ payment_status: "FAILED" })
         .eq("id", rideId)
-        .eq("passenger_id", user.id);
+        .eq("passenger_id", passengerUserId);
 
       return new Response(
         JSON.stringify({
@@ -93,7 +100,7 @@ export async function POST(req: Request) {
         try {
           const insertPayload: any = {
             ride_id: rideId,
-            user_id: user.id,
+            user_id: passengerUserId,
             provider: "stripe",
             provider_reference: sessionId,
             status: "PAID",
@@ -119,7 +126,7 @@ export async function POST(req: Request) {
         driver_payout_cents: driverPayoutCents,
       })
       .eq("id", rideId)
-      .eq("passenger_id", user.id)
+      .eq("passenger_id", passengerUserId)
       .select("id,pickup_address,dropoff_address,estimated_fare_cents")
       .single();
 
@@ -138,7 +145,7 @@ export async function POST(req: Request) {
       rideId: ride.id,
       pickupAddress: ride.pickup_address,
       dropoffAddress: ride.dropoff_address,
-      passengerEmail: user.email ?? null,
+      passengerEmail,
       estimatedFareCents: ride.estimated_fare_cents ?? amountCents,
     });
 
@@ -146,7 +153,7 @@ export async function POST(req: Request) {
       rideId,
       pickupAddress: session?.metadata?.pickup_address ?? null,
       dropoffAddress: session?.metadata?.dropoff_address ?? null,
-      passengerEmail: user.email ?? null,
+      passengerEmail,
       estimatedFareCents: amountCents,
     });
 
