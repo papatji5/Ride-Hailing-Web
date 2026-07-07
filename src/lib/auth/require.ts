@@ -33,13 +33,11 @@ export async function requireRole(role: AppRole) {
 
     await supabase
       .from("profiles")
-      .insert({
+      .upsert({
         id: user.id,
         email: user.email ?? undefined,
         role: "PASSENGER",
-      })
-      .onConflict("id")
-      .ignore();
+      }, { onConflict: "id" });
 
     return user;
   }
