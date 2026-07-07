@@ -74,6 +74,7 @@ export default function RideChat({ rideId }: { rideId: string }) {
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [isUserNearBottom, setIsUserNearBottom] = useState(true);
 
   useEffect(() => {
     if (!rideId) return;
@@ -147,17 +148,48 @@ export default function RideChat({ rideId }: { rideId: string }) {
       const el = containerRef.current;
       if (!el) return;
 
-      // Only auto-scroll if the user is near the bottom (so we don't yank them)
-      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      const shouldAutoScroll = distanceFromBottom < 120;
+      // Attach scroll listener to track whether the user is near the bottom.
+      const onScroll = () => {
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        setIsUserNearBottom(distanceFromBottom < 120);
+      };
 
-      if (shouldAutoScroll) {
-        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      el.addEventListener("scroll", onScroll, { passive: true });
+      // run once to initialise
+      onScroll();
+
+      return () => {
+        try {
+          el.removeEventListener("scroll", onScroll as EventListener);
+        } catch {
+          // ignore
+        }
+      };
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const el = containerRef.current;
+      if (!el) return;
+
+      const lastMsg = messages[messages.length - 1];
+      const lastFromCurrent = Boolean(
+        (currentUserId && lastMsg?.sender_id && String(lastMsg.sender_id) === String(currentUserId)) ||
+        lastMsg?.sender_role === "YOU" ||
+        lastMsg?.sender_name === "You"
+      );
+
+      if (lastFromCurrent || isUserNearBottom) {
+        // instant scroll to avoid layout jank on mobile; smooth can cause page jumps
+        el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
       }
     } catch {
       // ignore
     }
-  }, [messages]);
+  }, [messages, isUserNearBottom, currentUserId]);
 
   const handleSend = async () => {
     const text = input.trim();
