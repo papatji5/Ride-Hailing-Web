@@ -62,12 +62,21 @@ async function geocodeAddress(address: string): Promise<Point | null> {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
   if (!token) return null;
   try {
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${token}&limit=1&country=za`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const feature = data?.features?.[0];
-    if (!feature) return null;
-    return { lng: feature.center[0], lat: feature.center[1] };
+    const searchUrls = [
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${token}&limit=1&country=za`,
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${token}&limit=1`,
+    ];
+
+    for (const url of searchUrls) {
+      const res = await fetch(url);
+      const data = await res.json();
+      const feature = data?.features?.[0];
+      if (feature?.center?.length === 2) {
+        return { lng: feature.center[0], lat: feature.center[1] };
+      }
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -259,8 +268,9 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
         if (address) setDropoffAddress(address);
       })
       .catch(() => {
-        if (!canceled) return;
-        setDropoffAddress(currentDropoffAddress);
+        if (!canceled) {
+          setDropoffAddress(currentDropoffAddress);
+        }
       });
     return () => {
       canceled = true;
