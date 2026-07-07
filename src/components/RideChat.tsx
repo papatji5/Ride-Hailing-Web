@@ -339,8 +339,8 @@ export default function RideChat({ rideId }: { rideId: string }) {
   };
 
   return (
-    <div className="rounded-lg bg-slate-900/70 p-3 sm:p-4 shadow-sm w-full" style={{ maxHeight: '60vh' }}>
-      <div className="flex items-start justify-between mb-3">
+    <div className="rounded-lg bg-slate-900/70 p-4 shadow-sm w-full max-w-full" style={{ maxHeight: 'calc(100vh - 180px)' }}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
         <h3 className="text-lg font-semibold text-white">Chat</h3>
         <div className="text-sm text-slate-400">
           Status: <span className="ml-1 text-emerald-400">●</span>
@@ -354,7 +354,7 @@ export default function RideChat({ rideId }: { rideId: string }) {
         </div>
       ) : null}
 
-      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-3 mb-3 px-2" style={{ maxHeight: '40vh' }}>
+      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-3 mb-3 px-0" style={{ maxHeight: '35vh', minHeight: '250px' }}>
         {loading && messages.length === 0 ? (
           <div className="text-sm text-slate-400">Loading messages...</div>
         ) : messages.length === 0 ? (
@@ -369,16 +369,16 @@ export default function RideChat({ rideId }: { rideId: string }) {
             const timeLabel = message.display_time ?? new Date(message.created_at).toLocaleTimeString();
             return (
               <div key={message.id} className={`flex ${isYou ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] sm:max-w-[75%] ${isYou ? "text-right" : "text-left"}`}>
-                  <div className={`inline-flex items-end ${isYou ? "flex-row-reverse" : ""}`}>
+                <div className="w-full max-w-full min-w-0">
+                  <div className={`inline-flex w-full items-end ${isYou ? "justify-end" : "justify-start"} gap-2`}>
                     <div className={`rounded-full w-8 h-8 flex items-center justify-center text-xs font-medium ${isYou ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white" : "bg-slate-700 text-slate-200"}`}>
                       {isYou ? "You" : label.charAt(0).toUpperCase()}
                     </div>
-                    <div className={isYou ? "mr-2" : "ml-2"}>
-                      <div className={`${isYou ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white" : "bg-slate-800 text-slate-200"} px-3 sm:px-4 py-2 rounded-2xl shadow break-words`}>
-                        <div className="whitespace-pre-wrap break-words">{message.text}</div>
+                    <div className="w-full min-w-0">
+                      <div className={`${isYou ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white" : "bg-slate-800 text-slate-200"} px-3 py-2 rounded-2xl shadow break-words w-full`}>
+                        <div className="whitespace-pre-wrap break-words text-sm">{message.text}</div>
                       </div>
-                      <div className="text-xs text-slate-400 mt-1">
+                      <div className="text-[11px] text-slate-400 mt-1">
                         {label} • {timeLabel}
                       </div>
                     </div>
@@ -390,19 +390,19 @@ export default function RideChat({ rideId }: { rideId: string }) {
         )}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
           type="text"
           placeholder="Type a message..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !sending ? void handleSend() : undefined}
-          className="flex-1 px-4 py-2 rounded-full bg-slate-800 text-slate-100 placeholder:text-slate-400 border border-slate-700 focus:outline-none"
+          className="w-full flex-1 min-w-0 px-4 py-3 rounded-full bg-slate-800 text-slate-100 placeholder:text-slate-400 border border-slate-700 focus:outline-none"
         />
         <button
           onClick={() => void handleSend()}
           disabled={sending || !input.trim()}
-          className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full sm:w-auto inline-flex justify-center items-center px-4 py-3 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow disabled:cursor-not-allowed disabled:opacity-60"
         >
           Send
         </button>
