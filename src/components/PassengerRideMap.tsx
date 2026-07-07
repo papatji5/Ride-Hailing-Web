@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { getSocket } from "@/lib/socket";
+import type { Feature, LineString } from "geojson";
 
 const CAR_ICON_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
@@ -136,7 +137,7 @@ export default function PassengerRideMap({
       const data = await response.json();
 
       if (data.coordinates) {
-        const geoJson = {
+        const geoJson: Feature<LineString> = {
           type: "Feature",
           properties: {},
           geometry: {
