@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { createClient as createBrowserClient } from "@/lib/supabase/browser";
 
 type ChatMessage = {
   id: string;
   text: string;
   sender_name: string | null;
   sender_role: string | null;
+  sender_id?: string | null;
   created_at: string;
   display_time?: string;
 };
@@ -19,6 +21,7 @@ function normalizeMessage(raw: any, index: number): ChatMessage | null {
 
   const senderName = raw.sender_name ?? raw.fromLabel ?? raw.from ?? null;
   const senderRole = raw.sender_role ?? (raw.from === "you" || raw.fromLabel === "You" ? "YOU" : null);
+  const senderId = raw.sender_id ?? raw.fromId ?? null;
   const rawTime = raw.created_at ?? raw.timestamp;
   const createdAt = typeof rawTime === "string" && !Number.isNaN(Date.parse(rawTime)) ? rawTime : new Date().toISOString();
 
@@ -27,6 +30,7 @@ function normalizeMessage(raw: any, index: number): ChatMessage | null {
     text,
     sender_name: senderName,
     sender_role: senderRole,
+    sender_id: senderId,
     created_at: createdAt,
     display_time: typeof raw.timestamp === "string" ? raw.timestamp : undefined,
   };
@@ -62,12 +66,14 @@ async function sendRideMessage(rideId: string, text: string) {
 
 export default function RideChat({ rideId }: { rideId: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!rideId) return;
@@ -116,6 +122,19 @@ export default function RideChat({ rideId }: { rideId: string }) {
   }, [rideId]);
 
   useEffect(() => {
+    // Get current user id for proper "you" detection
+    try {
+      const supabase = createBrowserClient();
+      void supabase.auth.getUser().then((res) => {
+        const user = (res as any)?.data?.user;
+        if (user?.id) setCurrentUserId(String(user.id));
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
     try {
       window.sessionStorage.setItem(`rideChat_${rideId}`, JSON.stringify(messages));
     } catch {
@@ -125,8 +144,15 @@ export default function RideChat({ rideId }: { rideId: string }) {
 
   useEffect(() => {
     try {
-      if (endRef.current) {
-        endRef.current.scrollIntoView({ behavior: "smooth" });
+      const el = containerRef.current;
+      if (!el) return;
+
+      // Only auto-scroll if the user is near the bottom (so we don't yank them)
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const shouldAutoScroll = distanceFromBottom < 120;
+
+      if (shouldAutoScroll) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       }
     } catch {
       // ignore
@@ -165,7 +191,7 @@ export default function RideChat({ rideId }: { rideId: string }) {
   };
 
   return (
-    <div className="rounded-lg bg-slate-900/70 p-4 shadow-sm" style={{ maxHeight: 520 }}>
+    <div className="rounded-lg bg-slate-900/70 p-3 sm:p-4 shadow-sm w-full" style={{ maxHeight: '60vh' }}>
       <div className="flex items-start justify-between mb-3">
         <h3 className="text-lg font-semibold text-white">Chat</h3>
         <div className="text-sm text-slate-400">
@@ -180,25 +206,28 @@ export default function RideChat({ rideId }: { rideId: string }) {
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto space-y-3 mb-3 px-2" style={{ maxHeight: 340 }}>
+      <div ref={containerRef} className="flex-1 overflow-y-auto space-y-3 mb-3 px-2" style={{ maxHeight: '40vh' }}>
         {loading && messages.length === 0 ? (
           <div className="text-sm text-slate-400">Loading messages...</div>
         ) : messages.length === 0 ? (
           <div className="text-sm text-slate-400">No messages yet</div>
         ) : (
           messages.map((message) => {
-            const isYou = message.sender_role === "YOU" || message.sender_name === "You";
+            const isYou =
+              message.sender_role === "YOU" ||
+              message.sender_name === "You" ||
+              (currentUserId && message.sender_id && String(message.sender_id) === String(currentUserId));
             const label = isYou ? "You" : message.sender_name ?? message.sender_role ?? "Other";
             const timeLabel = message.display_time ?? new Date(message.created_at).toLocaleTimeString();
             return (
               <div key={message.id} className={`flex ${isYou ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[75%] ${isYou ? "text-right" : "text-left"}`}>
+                <div className={`max-w-[85%] sm:max-w-[75%] ${isYou ? "text-right" : "text-left"}`}>
                   <div className={`inline-flex items-end ${isYou ? "flex-row-reverse" : ""}`}>
                     <div className={`rounded-full w-8 h-8 flex items-center justify-center text-xs font-medium ${isYou ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white" : "bg-slate-700 text-slate-200"}`}>
                       {isYou ? "You" : label.charAt(0).toUpperCase()}
                     </div>
                     <div className={isYou ? "mr-2" : "ml-2"}>
-                      <div className={`${isYou ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white" : "bg-slate-800 text-slate-200"} px-4 py-2 rounded-2xl shadow`}>
+                      <div className={`${isYou ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white" : "bg-slate-800 text-slate-200"} px-3 sm:px-4 py-2 rounded-2xl shadow break-words`}>
                         <div className="whitespace-pre-wrap break-words">{message.text}</div>
                       </div>
                       <div className="text-xs text-slate-400 mt-1">
