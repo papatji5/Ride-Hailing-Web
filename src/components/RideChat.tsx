@@ -65,6 +65,7 @@ async function sendRideMessage(rideId: string, text: string) {
 }
 
 export default function RideChat({ rideId }: { rideId: string }) {
+  const DEBUG_DIAG = true; // toggle temporary diagnostics
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -118,6 +119,119 @@ export default function RideChat({ rideId }: { rideId: string }) {
       canceled = true;
       window.clearInterval(interval);
     };
+  }, [rideId]);
+
+  // Diagnostics: capture active element and scroll positions to help debug automatic jumps
+  useEffect(() => {
+    if (!DEBUG_DIAG) return;
+
+    const dump = () => {
+      try {
+        const a = document.activeElement as HTMLElement | null;
+        const info = {
+          time: new Date().toISOString(),
+          activeTag: a?.tagName ?? null,
+          activeId: a?.id ?? null,
+          activeClass: a?.className ?? null,
+          scrollX: window.scrollX,
+          scrollY: window.scrollY,
+        };
+        // console and localStorage for post-refresh inspection
+        // eslint-disable-next-line no-console
+        console.log("RideChat DEBUG:", info);
+        try {
+          const key = "rideChat_debug";
+          const prev = JSON.parse(window.localStorage.getItem(key) || "[]");
+          prev.push(info);
+          window.localStorage.setItem(key, JSON.stringify(prev.slice(-200)));
+        } catch {}
+      } catch {}
+    };
+
+    dump();
+
+    const onFocus = () => dump();
+    const onScroll = () => dump();
+
+    window.addEventListener("focus", onFocus, true);
+    window.addEventListener("scroll", onScroll, true);
+
+    const observer = new MutationObserver(() => dump());
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+
+    return () => {
+      window.removeEventListener("focus", onFocus, true);
+      window.removeEventListener("scroll", onScroll, true);
+      observer.disconnect();
+    };
+  }, [rideId]);
+
+  useEffect(() => {
+    if (!DEBUG_DIAG) return;
+    try {
+      // log on messages change too
+      const a = document.activeElement as HTMLElement | null;
+      // eslint-disable-next-line no-console
+      console.log("RideChat DEBUG messages changed. active:", a?.tagName, "id:", a?.id, "scrollY:", window.scrollY);
+    } catch {}
+  }, [messages]);
+
+  // Mitigation: if an element inside the chat is focused on load/refresh,
+  // blur it to prevent the browser from scrolling to that element.
+  useEffect(() => {
+    try {
+      const a = document.activeElement as HTMLElement | null;
+      if (a && containerRef.current && containerRef.current.contains(a)) {
+        try {
+          a.blur();
+          // eslint-disable-next-line no-console
+          console.log("RideChat DEBUG: blurred focused element to prevent jump", a.tagName, a.id);
+        } catch {}
+      }
+    } catch {}
+  }, [rideId]);
+
+  // Scroll mitigation: if the browser restored scroll into the chat area on refresh,
+  // move the viewport back to the top shortly after mount. Runs once per mount.
+  useEffect(() => {
+    try {
+      const el = containerRef.current;
+      if (!el) return;
+
+      const rect = el.getBoundingClientRect();
+      const inViewport = rect.top >= 0 && rect.top < window.innerHeight;
+
+      if (inViewport) {
+        // If the chat is currently visible at top of viewport after refresh,
+        // reset scroll to top after a short delay so browser finishes its restore first.
+        const t1 = window.setTimeout(() => {
+          try {
+            window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+            // eslint-disable-next-line no-console
+            console.log("RideChat DEBUG: restored scroll to top to avoid jump");
+          } catch {}
+        }, 80);
+
+        // safety retry in case of late mutations
+        const t2 = window.setTimeout(() => {
+          try {
+            if (containerRef.current) {
+              const r2 = containerRef.current.getBoundingClientRect();
+              if (r2.top >= 0 && r2.top < window.innerHeight) {
+                window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+                // eslint-disable-next-line no-console
+                console.log("RideChat DEBUG: restored scroll to top (retry)");
+              }
+            }
+          } catch {}
+        }, 400);
+
+        return () => {
+          window.clearTimeout(t1);
+          window.clearTimeout(t2);
+        };
+      }
+    } catch {}
   }, [rideId]);
 
   useEffect(() => {
