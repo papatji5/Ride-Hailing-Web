@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/require";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { createClient } from "@/lib/supabase/server";
 import AdminFinance from "@/app/admin/finance";
 
 export const dynamic = "force-dynamic";
