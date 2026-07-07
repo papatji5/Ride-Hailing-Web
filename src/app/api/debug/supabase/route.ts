@@ -43,11 +43,17 @@ export async function GET() {
         : null,
     };
 
-    if (ridesRes.error || paymentsRes.error) {
+    if (ridesRes.error || paymentsRes.error || rideMessagesRes.error) {
       return NextResponse.json({ success: false, errors, keyInfo }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, rides: ridesData ?? [], payments: paymentsData ?? [], keyInfo });
+    return NextResponse.json({
+      success: true,
+      rides: ridesData ?? [],
+      payments: paymentsData ?? [],
+      ride_messages: rideMessagesData ?? [],
+      keyInfo,
+    });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: String(err?.message ?? err) }, { status: 500 });
   }
