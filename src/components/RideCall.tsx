@@ -132,7 +132,6 @@ export default function RideCall({ rideId }: { rideId: string }) {
   const endCall = () => {
     const pc = peerConnectionRef.current;
     if (pc) {
-      pc.getTracks?.()?.forEach((track) => track.stop());
       pc.close();
       peerConnectionRef.current = null;
     }
