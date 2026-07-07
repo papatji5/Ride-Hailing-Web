@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceRoleClient } from "@/lib/supabase/server";
 
 async function getCurrentUser() {
   const authClient = await createClient();
@@ -46,7 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: context.error }, { status: context.status });
     }
 
-    const supabase = await createClient();
+    const supabase = createServiceRoleClient();
     const rideContext = await getRideForParticipant(supabase, rideId, context.user.id);
     if ("error" in rideContext) {
       return NextResponse.json({ error: rideContext.error }, { status: rideContext.status });
@@ -59,7 +59,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .order("created_at", { ascending: true });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({ messages: messages ?? [] });
@@ -88,7 +96,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: context.error }, { status: context.status });
     }
 
-    const supabase = await createClient();
+    const supabase = createServiceRoleClient();
     const rideContext = await getRideForParticipant(supabase, rideId, context.user.id);
     if ("error" in rideContext) {
       return NextResponse.json({ error: rideContext.error }, { status: rideContext.status });
@@ -110,7 +118,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .single();
 
     if (error || !message) {
-      return NextResponse.json({ error: error?.message ?? "Unable to send message" }, { status: 500 });
+      return NextResponse.json(
+        {
+          error: error?.message ?? "Unable to send message",
+          code: error?.code,
+          details: error?.details,
+          hint: error?.hint,
+        },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({ message });

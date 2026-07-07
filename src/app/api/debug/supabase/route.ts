@@ -13,7 +13,7 @@ export async function GET() {
 
     const supabase = createServiceRoleClient();
 
-    const [ridesRes, paymentsRes] = await Promise.all([
+    const [ridesRes, paymentsRes, rideMessagesRes] = await Promise.all([
       supabase
         .from('rides')
         .select('id,status,final_fare_cents,platform_fee_cents,driver_payout_cents,payment_status')
@@ -24,11 +24,24 @@ export async function GET() {
         .select('id,ride_id,user_id,amount_cents,status,created_at')
         .order('created_at', { ascending: false })
         .limit(10),
+      supabase
+        .from('ride_messages')
+        .select('id,ride_id')
+        .limit(5),
     ]);
 
-    const [ridesData, paymentsData] = [ridesRes.data, paymentsRes.data];
-    const errors = { rides: ridesRes.error ? { message: ridesRes.error.message, details: ridesRes.error.details, hint: ridesRes.error.hint, code: ridesRes.error.code } : null,
-                     payments: paymentsRes.error ? { message: paymentsRes.error.message, details: paymentsRes.error.details, hint: paymentsRes.error.hint, code: paymentsRes.error.code } : null };
+    const [ridesData, paymentsData, rideMessagesData] = [ridesRes.data, paymentsRes.data, rideMessagesRes.data];
+    const errors = {
+      rides: ridesRes.error
+        ? { message: ridesRes.error.message, details: ridesRes.error.details, hint: ridesRes.error.hint, code: ridesRes.error.code }
+        : null,
+      payments: paymentsRes.error
+        ? { message: paymentsRes.error.message, details: paymentsRes.error.details, hint: paymentsRes.error.hint, code: paymentsRes.error.code }
+        : null,
+      ride_messages: rideMessagesRes.error
+        ? { message: rideMessagesRes.error.message, details: rideMessagesRes.error.details, hint: rideMessagesRes.error.hint, code: rideMessagesRes.error.code }
+        : null,
+    };
 
     if (ridesRes.error || paymentsRes.error) {
       return NextResponse.json({ success: false, errors, keyInfo }, { status: 500 });
