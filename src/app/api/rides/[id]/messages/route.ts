@@ -37,45 +37,6 @@ async function getRideForParticipant(supabase: ReturnType<typeof createServiceRo
   return { ride };
 }
 
-async function getOrCreateProfile(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  user: { id: string; email?: string | null },
-  role: "PASSENGER" | "DRIVER",
-) {
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("id,role,full_name,email")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (profileError) {
-    return { error: profileError.message, status: 500 as const };
-  }
-
-  if (profile) {
-    return { profile };
-  }
-
-  const { data: createdProfile, error: createError } = await supabase
-    .from("profiles")
-    .upsert(
-      {
-        id: user.id,
-        email: user.email ?? undefined,
-        role,
-      },
-      { onConflict: "id" },
-    )
-    .select("id,role,full_name,email")
-    .single();
-
-  if (createError || !createdProfile) {
-    return { error: createError?.message ?? "Profile not found", status: 500 as const };
-  }
-
-  return { profile: createdProfile };
-}
-
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: rideId } = await params;
@@ -89,13 +50,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const rideContext = await getRideForParticipant(supabase, rideId, context.user.id);
     if ("error" in rideContext) {
       return NextResponse.json({ error: rideContext.error }, { status: rideContext.status });
-    }
-
-    const participantRole = rideContext.ride.passenger_id === context.user.id ? "PASSENGER" : "DRIVER";
-    const profileContext = await getOrCreateProfile(supabase, context.user, participantRole);
-
-    if ("error" in profileContext) {
-      return NextResponse.json({ error: profileContext.error }, { status: profileContext.status });
     }
 
     const { data: messages, error } = await supabase
@@ -140,21 +94,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: rideContext.error }, { status: rideContext.status });
     }
 
-    const participantRole = rideContext.ride.passenger_id === context.user.id ? "PASSENGER" : "DRIVER";
-    const profileContext = await getOrCreateProfile(supabase, context.user, participantRole);
-
-    if ("error" in profileContext) {
-      return NextResponse.json({ error: profileContext.error }, { status: profileContext.status });
-    }
-
-    const senderName = profileContext.profile.full_name ?? profileContext.profile.email ?? profileContext.profile.role;
+    const senderRole = rideContext.ride.passenger_id === context.user.id ? "PASSENGER" : "DRIVER";
+    const senderName = context.user.email ?? senderRole;
 
     const { data: message, error } = await supabase
       .from("ride_messages")
       .insert({
         ride_id: rideId,
         sender_id: context.user.id,
-        sender_role: profileContext.profile.role,
+        sender_role: senderRole,
         sender_name: senderName,
         text,
       })
