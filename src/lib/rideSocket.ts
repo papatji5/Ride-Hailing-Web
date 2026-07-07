@@ -24,6 +24,21 @@ export function emitRideStatusChanged(rideId: string, status: string, payload: a
   const s = getSocket();
   console.debug('emitRideStatusChanged', { rideId, status, payload });
   s.emit('rideStatusChanged', { rideId, status, payload });
+  // Fallback: also POST a ride message so passengers see the update even when Socket.IO
+  // is not available (e.g., on Vercel). This writes a driver message to the ride messages
+  // endpoint which the passenger RideChat polls.
+  try {
+    void fetch(`/api/rides/${encodeURIComponent(rideId)}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ text: payload?.message ?? `Status: ${status}` }),
+    }).then((res) => {
+      if (!res.ok) console.debug('emitRideStatusChanged: fallback POST failed', res.status);
+    }).catch((err) => console.debug('emitRideStatusChanged: fallback POST error', err));
+  } catch (e) {
+    // ignore
+  }
 }
 
 export function onRideStatusChanged(cb: (payload: any) => void) {

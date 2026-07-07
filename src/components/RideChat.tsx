@@ -74,6 +74,7 @@ export default function RideChat({ rideId }: { rideId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const prevMessagesRef = useRef<ChatMessage[] | null>(null);
 
   useEffect(() => {
     if (!rideId) return;
@@ -173,6 +174,33 @@ export default function RideChat({ rideId }: { rideId: string }) {
       const a = document.activeElement as HTMLElement | null;
       // eslint-disable-next-line no-console
       console.log("RideChat DEBUG messages changed. active:", a?.tagName, "id:", a?.id, "scrollY:", window.scrollY);
+    } catch {}
+  }, [messages]);
+
+  // Notify passenger when a new DRIVER message indicates arrival
+  useEffect(() => {
+    try {
+      const prev = prevMessagesRef.current || [];
+      if (!prev) {
+        prevMessagesRef.current = messages;
+        return;
+      }
+
+      if (messages.length > prev.length) {
+        const newMessages = messages.slice(prev.length);
+        for (const m of newMessages) {
+          const isDriver = m.sender_role === "DRIVER" || (m.sender_name && m.sender_name.toLowerCase().includes("driver"));
+          const text = String(m.text ?? "").toLowerCase();
+          if (isDriver && text.includes("arrived")) {
+            if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+              try {
+                new Notification("Driver arrived", { body: m.text });
+              } catch {}
+            }
+          }
+        }
+      }
+      prevMessagesRef.current = messages;
     } catch {}
   }, [messages]);
 
