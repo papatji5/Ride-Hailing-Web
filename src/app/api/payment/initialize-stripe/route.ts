@@ -55,6 +55,10 @@ export async function POST(req: Request) {
       });
     }
 
+    // Determine base URL for redirects: prefer request Origin, then NEXT_PUBLIC_APP_URL, then localhost
+    const originHeader = (req.headers.get("origin") || "").trim();
+    const baseUrl = originHeader || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -72,8 +76,8 @@ export async function POST(req: Request) {
         },
       ],
       mode: "payment",
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/passenger?payment=success&session={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/passenger?payment=cancelled`,
+      success_url: `${baseUrl}/passenger?payment=success&session={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/passenger?payment=cancelled`,
       customer_email: email,
       metadata: {
         ride_id,
