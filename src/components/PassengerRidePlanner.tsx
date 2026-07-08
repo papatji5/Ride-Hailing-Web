@@ -54,6 +54,8 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 export default function PassengerRidePlanner({ requestRideAction }: RidePlannerProps) {
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const mapFormEl = useRef<HTMLDivElement | null>(null);
+  const mapFormRef = useRef<mapboxgl.Map | null>(null);
   const pickupMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const dropoffMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const suggestTimer = useRef<number | null>(null);
@@ -80,50 +82,85 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
   const [routeFeature, setRouteFeature] = useState<RouteFeature | null>(null);
 
   useEffect(() => {
-    if (!mapEl.current) return;
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+    if (!token) return;
+    mapboxgl.accessToken = token;
 
-    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-    const map = new mapboxgl.Map({
-      container: mapEl.current,
-      style: "mapbox://styles/mapbox/streets-v11",
-      center: [28.0473, -26.2041],
-      zoom: 12,
-    });
-    mapRef.current = map;
+    const isMobile = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 767px)").matches;
 
-    map.on("load", () => {
-      if (!map.getSource("route")) {
-        map.addSource("route", {
-          type: "geojson",
-          data: {
-            type: "Feature",
-            properties: {},
-            geometry: { type: "LineString", coordinates: [] },
-          },
-        });
-      }
+    // Initialize mobile form map if on small screens
+    if (isMobile && mapFormEl.current) {
+      const fm = new mapboxgl.Map({
+        container: mapFormEl.current,
+        style: "mapbox://styles/mapbox/streets-v11",
+        center: [28.0473, -26.2041],
+        zoom: 12,
+      });
+      mapFormRef.current = fm;
 
-      if (!map.getLayer("route-line")) {
-        map.addLayer({
-          id: "route-line",
-          type: "line",
-          source: "route",
-          layout: { "line-join": "round", "line-cap": "round" },
-          paint: {
-            "line-color": "#22c55e",
-            "line-width": 5,
-            "line-opacity": 0.9,
-          },
-        });
-      }
-    });
+      fm.on("load", () => {
+        if (!fm.getSource("route")) {
+          fm.addSource("route", {
+            type: "geojson",
+            data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } },
+          });
+        }
 
-    map.on("click", (e: any) => {
-      const { lng, lat } = e.lngLat;
-      setDropoff({ lng, lat });
-    });
+        if (!fm.getLayer("route-line")) {
+          fm.addLayer({
+            id: "route-line",
+            type: "line",
+            source: "route",
+            layout: { "line-join": "round", "line-cap": "round" },
+            paint: { "line-color": "#22c55e", "line-width": 5, "line-opacity": 0.9 },
+          });
+        }
+      });
 
-    return () => map.remove();
+      fm.on("click", (e: any) => {
+        const { lng, lat } = e.lngLat;
+        setDropoff({ lng, lat });
+      });
+
+      return () => fm.remove();
+    }
+
+    // Otherwise initialize the larger desktop map
+    if (mapEl.current) {
+      const map = new mapboxgl.Map({
+        container: mapEl.current,
+        style: "mapbox://styles/mapbox/streets-v11",
+        center: [28.0473, -26.2041],
+        zoom: 12,
+      });
+      mapRef.current = map;
+
+      map.on("load", () => {
+        if (!map.getSource("route")) {
+          map.addSource("route", {
+            type: "geojson",
+            data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } },
+          });
+        }
+
+        if (!map.getLayer("route-line")) {
+          map.addLayer({
+            id: "route-line",
+            type: "line",
+            source: "route",
+            layout: { "line-join": "round", "line-cap": "round" },
+            paint: { "line-color": "#22c55e", "line-width": 5, "line-opacity": 0.9 },
+          });
+        }
+      });
+
+      map.on("click", (e: any) => {
+        const { lng, lat } = e.lngLat;
+        setDropoff({ lng, lat });
+      });
+
+      return () => map.remove();
+    }
   }, []);
 
 
@@ -157,8 +194,8 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
         const { latitude: lat, longitude: lng } = pos.coords;
         setPickup({ lng, lat });
         setGeoStatus("granted");
-        const map = mapRef.current;
-        if (map) map.flyTo({ center: [lng, lat], zoom: 14 });
+        const activeMap = mapFormRef.current ?? mapRef.current;
+        if (activeMap) activeMap.flyTo({ center: [lng, lat], zoom: 14 });
       },
       (err) => {
         setGeoStatus("error");
@@ -179,7 +216,7 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
   }, []);
 
   useEffect(() => {
-    const map = mapRef.current;
+    const map = mapFormRef.current ?? mapRef.current;
     if (!map) return;
 
     pickupMarkerRef.current?.remove();
@@ -262,7 +299,7 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
   }, [pickup, dropoff]);
 
   useEffect(() => {
-    const map = mapRef.current;
+    const map = mapFormRef.current ?? mapRef.current;
     if (!map || !routeFeature) return;
     const source = map.getSource("route") as mapboxgl.GeoJSONSource | undefined;
     source?.setData(routeFeature as GeoJSON.Feature);
@@ -310,7 +347,7 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
     setDropoffAddress(suggestion.place_name);
     setQuery(suggestion.place_name);
     setSuggestions([]);
-    const map = mapRef.current;
+    const map = mapFormRef.current ?? mapRef.current;
     if (map) map.flyTo({ center: [lng, lat], zoom: 15 });
   }
 
@@ -445,11 +482,21 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
 
   return (
     <section className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,1fr)]">
-      <div className="flex min-h-[280px] md:min-h-[520px] lg:min-h-[760px] flex-col rounded-xl border border-white/10 bg-slate-900 p-3">
+      <div className="flex min-h-[280px] md:min-h-[520px] lg:min-h-[760px] flex-col rounded-xl border border-white/10 bg-slate-900 p-3 hidden md:flex">
         <div ref={mapEl} className="min-h-[240px] md:min-h-[480px] lg:min-h-[760px] w-full flex-1 rounded-md" />
       </div>
 
       <form onSubmit={handleFormSubmit} className="space-y-4 rounded-xl border border-white/10 bg-white/3 p-4">
+        {/* Mobile-only compact map above dropoff */}
+        <div className="block md:hidden">
+          <div className="rounded-xl border border-white/10 bg-slate-900 p-2 mb-3">
+            <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Live ride map</div>
+            <div
+              ref={mapFormEl}
+              style={{ width: "100%", height: "220px", borderRadius: 8, overflow: "hidden" }}
+            />
+          </div>
+        </div>
         <div>
           <p className="text-sm text-slate-300">Passenger ride request</p>
           <h2 className="mt-1 text-xl font-semibold text-white">Pick a dropoff and request a ride</h2>
@@ -522,8 +569,9 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
               type="button"
               className="rounded-full border border-white/10 px-3 py-2 text-sm text-white"
               onClick={() => {
-                if (mapRef.current) {
-                  const center = mapRef.current.getCenter();
+                const activeMap = mapFormRef.current ?? mapRef.current;
+                if (activeMap) {
+                  const center = activeMap.getCenter();
                   setPickup({ lng: center.lng, lat: center.lat });
                   setPickupAddress(null);
                 }
