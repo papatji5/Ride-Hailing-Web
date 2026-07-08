@@ -487,16 +487,6 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
       </div>
 
       <form onSubmit={handleFormSubmit} className="space-y-4 rounded-xl border border-white/10 bg-white/3 p-4">
-        {/* Mobile-only compact map above dropoff */}
-        <div className="block md:hidden">
-          <div className="rounded-xl border border-white/10 bg-slate-900 p-2 mb-3">
-            <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Live ride map</div>
-            <div
-              ref={mapFormEl}
-              style={{ width: "100%", height: "220px", borderRadius: 8, overflow: "hidden" }}
-            />
-          </div>
-        </div>
         <div>
           <p className="text-sm text-slate-300">Passenger ride request</p>
           <h2 className="mt-1 text-xl font-semibold text-white">Pick a dropoff and request a ride</h2>
@@ -581,6 +571,17 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
             </button>
           </div>
           {geoError ? <div className="mt-2 text-xs text-rose-400">{geoError}</div> : null}
+        </div>
+
+        {/* Mobile-only compact map above dropoff */}
+        <div className="block md:hidden">
+          <div className="rounded-xl border border-white/10 bg-slate-900 p-2 mb-3">
+            <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Live ride map</div>
+            <div
+              ref={mapFormEl}
+              style={{ width: "100%", height: "220px", borderRadius: 8, overflow: "hidden" }}
+            />
+          </div>
         </div>
 
         <div className="rounded-lg border border-white/10 bg-slate-900/80 p-3 text-sm text-slate-200">
