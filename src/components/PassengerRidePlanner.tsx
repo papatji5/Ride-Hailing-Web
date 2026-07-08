@@ -445,8 +445,8 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
 
   return (
     <section className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,1fr)]">
-      <div className="flex min-h-[760px] flex-col rounded-xl border border-white/10 bg-slate-900 p-3">
-        <div ref={mapEl} className="min-h-[760px] w-full flex-1 rounded-md" />
+      <div className="flex min-h-[280px] md:min-h-[520px] lg:min-h-[760px] flex-col rounded-xl border border-white/10 bg-slate-900 p-3">
+        <div ref={mapEl} className="min-h-[240px] md:min-h-[480px] lg:min-h-[760px] w-full flex-1 rounded-md" />
       </div>
 
       <form onSubmit={handleFormSubmit} className="space-y-4 rounded-xl border border-white/10 bg-white/3 p-4">
