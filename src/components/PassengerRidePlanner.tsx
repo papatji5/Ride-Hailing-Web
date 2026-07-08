@@ -493,71 +493,81 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
           <p className="mt-1 text-sm text-slate-400">Your pickup can be detected automatically or moved to the map center.</p>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-slate-950/80 shadow-lg shadow-cyan-500/10">
-          <div className="flex items-start gap-4 p-4">
-            <div className="relative h-32 w-32 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-900">
-              <Image src={featuredDriver.driverPhotoSrc} alt={featuredDriver.driverPhotoAlt} fill className="object-cover" sizes="128px" />
+        <div className="overflow-hidden rounded-[32px] border border-cyan-400/15 bg-gradient-to-br from-slate-950/95 via-slate-900/95 to-slate-950/90 shadow-[0_30px_90px_rgba(14,165,233,0.15)]">
+          <div className="flex flex-col gap-5 p-6 md:flex-row md:items-center md:gap-7">
+            <div className="relative h-40 w-40 shrink-0 overflow-hidden rounded-[30px] border border-cyan-400/10 bg-slate-900 shadow-[0_30px_80px_rgba(15,23,42,0.4)]">
+              <Image src={featuredDriver.driverPhotoSrc} alt={featuredDriver.driverPhotoAlt} fill className="object-cover" sizes="160px" />
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-200 shadow-sm shadow-cyan-500/10">
                   Featured driver
                 </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
-                  One-driver pilot
+                <span className="rounded-full border border-slate-700/70 bg-slate-900/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-300">
+                  Premium service
                 </span>
               </div>
-              <div className="mt-2">
-                <h3 className="truncate text-lg font-semibold text-white">{featuredDriver.name}</h3>
+              <div className="mt-4">
+                <h3 className="truncate text-3xl font-semibold text-white">{featuredDriver.name}</h3>
                 <a
                   href={`tel:${featuredDriver.phone.replace(/\s+/g, "")}`}
-                  className="mt-1 block text-sm font-medium text-cyan-200 hover:underline"
+                  className="mt-3 inline-flex text-sm font-semibold uppercase tracking-[0.22em] text-cyan-300 transition hover:text-cyan-100"
                 >
                   {featuredDriver.phone}
                 </a>
-                <p className="mt-1 text-sm text-slate-400">{featuredDriver.notes}</p>
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-400">{featuredDriver.notes}</p>
               </div>
             </div>
           </div>
 
-          <div className="border-t border-white/10 bg-white/5 text-sm">
-            <div className="bg-slate-950/90 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-400">Car</div>
-
-              <div className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-slate-900 p-3 h-72 flex items-center justify-center">
-                <Image
-                  src={featuredDriver.carPhotoSrc}
-                  alt={featuredDriver.carPhotoAlt}
-                  width={1600}
-                  height={800}
-                  className="object-contain h-full w-auto"
-                />
+          <div className="border-t border-slate-700/60 bg-slate-950/85 p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.22em] text-slate-400">Premium vehicle</div>
+                <div className="mt-3 text-xl font-semibold text-white">{featuredDriver.car}</div>
               </div>
+              <div className="rounded-3xl bg-slate-900/90 px-4 py-3 text-sm text-slate-300 border border-slate-700/80">
+                Registration
+                <div className="mt-1 text-base font-semibold text-white">{featuredDriver.plate}</div>
+              </div>
+            </div>
 
-              <div className="mt-3 font-medium text-white">{featuredDriver.car}</div>
-              <div className="mt-1 text-slate-400">Registration: {featuredDriver.plate}</div>
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-3xl border border-slate-700/70 bg-slate-900/90 p-4 text-sm text-slate-300 shadow-[0_10px_30px_rgba(15,23,42,0.25)]">
+                <div className="text-xs uppercase tracking-[0.18em] text-cyan-300/80">Driver quality</div>
+                <div className="mt-2 text-base font-semibold text-white">Fully verified, professional service</div>
+              </div>
+              <div className="rounded-3xl border border-slate-700/70 bg-slate-900/90 p-4 text-sm text-slate-300 shadow-[0_10px_30px_rgba(15,23,42,0.25)]">
+                <div className="text-xs uppercase tracking-[0.18em] text-cyan-300/80">Comfort status</div>
+                <div className="mt-2 text-base font-semibold text-white">Luxury sedan with climate control</div>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="rounded-lg border border-white/10 bg-slate-900/80 p-3 text-sm text-slate-200">
-          <div className="text-xs uppercase tracking-wide text-slate-400">Pickup</div>
-          <div className="mt-1 font-medium text-white">
-            {pickup ? `${pickup.lat.toFixed(6)}, ${pickup.lng.toFixed(6)}` : geoStatus === "requesting" ? "Detecting..." : "Not detected"}
+        <div className="rounded-[28px] border border-slate-700/70 bg-slate-900/90 p-5 text-sm text-slate-200 shadow-[0_25px_80px_rgba(15,23,42,0.3)]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-[0.22em] text-slate-400">Pickup</div>
+              <div className="mt-3 text-base font-semibold text-white">
+                {pickup ? `${pickup.lat.toFixed(6)}, ${pickup.lng.toFixed(6)}` : geoStatus === "requesting" ? "Detecting..." : "Not detected"}
+              </div>
+            </div>
+            <span className="inline-flex rounded-full bg-cyan-500/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-cyan-200 ring-1 ring-cyan-500/20">Live pickup</span>
           </div>
-          <div className="mt-1 text-xs text-slate-400">{pickupAddress ?? (geoStatus === "requesting" ? "Resolving address..." : "")}</div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 text-xs leading-6 text-slate-400">{pickupAddress ?? (geoStatus === "requesting" ? "Resolving address..." : "Allow location or use map center.")}</div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <button
               type="button"
-              className="rounded-full bg-gradient-to-r from-blue-600 to-cyan-400 px-3 py-2 text-sm font-semibold text-white"
+              className="rounded-3xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition hover:brightness-110"
               onClick={() => detectPickup()}
             >
-              Retry detect pickup
+              Retry pickup
             </button>
             <button
               type="button"
-              className="rounded-full border border-white/10 px-3 py-2 text-sm text-white"
+              className="rounded-3xl border border-slate-700/80 bg-slate-950/90 px-5 py-3 text-sm font-semibold text-white transition hover:border-cyan-400/50"
               onClick={() => {
                 const activeMap = mapFormRef.current ?? mapRef.current;
                 if (activeMap) {
@@ -567,10 +577,10 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
                 }
               }}
             >
-              Use map center as pickup
+              Use center
             </button>
           </div>
-          {geoError ? <div className="mt-2 text-xs text-rose-400">{geoError}</div> : null}
+          {geoError ? <div className="mt-4 rounded-3xl bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{geoError}</div> : null}
         </div>
 
         {/* Mobile-only compact map above dropoff */}
@@ -584,23 +594,29 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
           </div>
         </div>
 
-        <div className="rounded-lg border border-white/10 bg-slate-900/80 p-3 text-sm text-slate-200">
-          <div className="text-xs uppercase tracking-wide text-slate-400">Dropoff</div>
-          <div className="mt-2">
+        <div className="rounded-[28px] border border-slate-700/70 bg-slate-900/90 p-5 text-sm text-slate-200 shadow-[0_25px_75px_rgba(15,23,42,0.28)]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-[0.22em] text-slate-400">Dropoff</div>
+              <div className="mt-2 text-sm text-slate-300">Choose where you want the driver to take you.</div>
+            </div>
+            <span className="inline-flex rounded-full bg-slate-800/90 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-300 ring-1 ring-slate-700/80">Map-enabled</span>
+          </div>
+          <div className="mt-4">
             <input
-              className="w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white placeholder:text-slate-500"
+              className="w-full rounded-[28px] border border-slate-700/80 bg-slate-950/95 px-5 py-3 text-sm text-white placeholder:text-slate-500 shadow-[inset_0_1px_3px_rgba(15,23,42,0.35)] outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
               placeholder="Type an address or place"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               aria-label="Search dropoff location"
             />
-            {loadingSuggestions ? <div className="mt-2 text-xs text-slate-400">Searching...</div> : null}
+            {loadingSuggestions ? <div className="mt-3 text-xs text-slate-400">Searching...</div> : null}
             {suggestions.length > 0 ? (
-              <ul className="mt-2 max-h-48 overflow-auto rounded-md border border-white/10 bg-slate-950 p-1 text-sm">
+              <ul className="mt-3 max-h-56 overflow-auto rounded-[24px] border border-slate-700/80 bg-slate-950/95 p-2 text-sm shadow-[0_10px_30px_rgba(15,23,42,0.25)]">
                 {suggestions.map((suggestion) => (
                   <li
                     key={suggestion.id}
-                    className="cursor-pointer rounded px-2 py-1 hover:bg-white/5"
+                    className="cursor-pointer rounded-[20px] px-3 py-3 text-sm text-slate-200 transition hover:bg-slate-800"
                     onClick={() => selectSuggestion(suggestion)}
                   >
                     {suggestion.place_name}
@@ -609,9 +625,11 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
               </ul>
             ) : null}
           </div>
-          <div className="mt-3 text-xs text-slate-400">Selected:</div>
-          <div className="mt-1 font-medium text-white">
-            {dropoffAddress ?? (dropoff ? `${dropoff.lat.toFixed(6)}, ${dropoff.lng.toFixed(6)}` : "Click map or pick suggestion")}
+          <div className="mt-5 rounded-[28px] border border-slate-700/70 bg-slate-950/90 px-5 py-4 text-sm text-slate-300 shadow-[0_10px_30px_rgba(15,23,42,0.25)]">
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Selected destination</div>
+            <div className="mt-3 text-base font-semibold text-white">
+              {dropoffAddress ?? (dropoff ? `${dropoff.lat.toFixed(6)}, ${dropoff.lng.toFixed(6)}` : "Click map or pick suggestion")}
+            </div>
           </div>
         </div>
 
