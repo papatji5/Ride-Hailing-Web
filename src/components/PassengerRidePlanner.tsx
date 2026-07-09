@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import MapboxPlaceSearch from "./MapboxPlaceSearch";
 
 type Suggestion = { id: string; place_name: string; center: [number, number] };
 type RouteFeature = GeoJSON.Feature<GeoJSON.LineString>;
@@ -624,29 +625,20 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
             </div>
             <span className="inline-flex rounded-full bg-slate-800/90 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-300 ring-1 ring-slate-700/80">Map-enabled</span>
           </div>
-          <div className="mt-4">
-            <input
-              className="w-full rounded-[28px] border border-slate-700/80 bg-slate-950/95 px-5 py-3 text-sm text-white placeholder:text-slate-500 shadow-[inset_0_1px_3px_rgba(15,23,42,0.35)] outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
-              placeholder="Type an address or place"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              aria-label="Search dropoff location"
-            />
-            {loadingSuggestions ? <div className="mt-3 text-xs text-slate-400">Searching...</div> : null}
-            {suggestions.length > 0 ? (
-              <ul className="mt-3 max-h-56 overflow-auto rounded-[24px] border border-slate-700/80 bg-slate-950/95 p-2 text-sm shadow-[0_10px_30px_rgba(15,23,42,0.25)]">
-                {suggestions.map((suggestion) => (
-                  <li
-                    key={suggestion.id}
-                    className="cursor-pointer rounded-[20px] px-3 py-3 text-sm text-slate-200 transition hover:bg-slate-800"
-                    onClick={() => selectSuggestion(suggestion)}
-                  >
-                    {suggestion.place_name}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+            <div className="mt-4">
+              <MapboxPlaceSearch
+                placeholder="Search destination (e.g. Mall of Africa)"
+                onSelect={(place) => {
+                  const [lng, lat] = place.center;
+                  setDropoff({ lng, lat });
+                  setDropoffAddress(place.place_name);
+                  setQuery(place.place_name);
+                  setSuggestions([]);
+                  const map = mapFormRef.current ?? mapRef.current;
+                  if (map) map.flyTo({ center: [lng, lat], zoom: 15 });
+                }}
+              />
+            </div>
           <div className="mt-5 rounded-[28px] border border-slate-700/70 bg-slate-950/90 px-5 py-4 text-sm text-slate-300 shadow-[0_10px_30px_rgba(15,23,42,0.25)]">
             <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Selected destination</div>
             <div className="mt-3 text-base font-semibold text-white">
