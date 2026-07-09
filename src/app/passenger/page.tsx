@@ -36,6 +36,13 @@ async function requestRideAction(formData: FormData) {
 
   const paymentMethod = String(formData.get("payment_method") ?? "CASH").toUpperCase();
   const paymentStatus = paymentMethod === "CARD" ? "PENDING" : "UNPAID";
+  const scheduledAt = String(formData.get("scheduled_at") ?? "").trim();
+
+  const scheduledAtValue = scheduledAt ? new Date(scheduledAt).toISOString() : null;
+
+  if (scheduledAt && isNaN(Date.parse(scheduledAt))) {
+    redirect("/passenger?error=" + encodeURIComponent("Scheduled pickup time is invalid."));
+  }
 
   const { error } = await supabase.from("rides").insert({
     passenger_id: user.id,
@@ -44,6 +51,7 @@ async function requestRideAction(formData: FormData) {
     dropoff_address: dropoffAddress,
     pickup_location: null,
     dropoff_location: null,
+    scheduled_at: scheduledAtValue,
     estimated_distance_km: parseOptionalNumber(formData.get("estimated_distance_km")),
     estimated_duration_min: parseOptionalNumber(formData.get("estimated_duration_min")),
     estimated_fare_cents: parseOptionalNumber(formData.get("estimated_fare_cents")),

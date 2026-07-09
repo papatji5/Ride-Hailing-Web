@@ -10,6 +10,7 @@ export async function POST(req: Request) {
     const {
       pickup_address,
       dropoff_address,
+      scheduled_at,
       estimated_distance_km,
       estimated_duration_min,
       estimated_fare_cents,
@@ -26,6 +27,24 @@ export async function POST(req: Request) {
     const paymentMethod = String(payment_method ?? "CASH").toUpperCase() === "CARD" ? "CARD" : "CASH";
     const paymentStatus = paymentMethod === "CARD" ? "PENDING" : "UNPAID";
 
+    let scheduledAtValue: string | null = null;
+    if (scheduled_at) {
+      const scheduledDate = new Date(String(scheduled_at));
+      if (isNaN(scheduledDate.getTime())) {
+        return new Response(
+          JSON.stringify({ error: "Scheduled pickup time is invalid." }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      if (scheduledDate.getTime() < Date.now()) {
+        return new Response(
+          JSON.stringify({ error: "Scheduled pickup time must be in the future." }),
+          { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      scheduledAtValue = scheduledDate.toISOString();
+    }
+
     const { data, error } = await supabase
       .from("rides")
       .insert({
@@ -33,6 +52,7 @@ export async function POST(req: Request) {
         status: "REQUESTED",
         pickup_address,
         dropoff_address,
+        scheduled_at: scheduledAtValue,
         pickup_location: null,
         dropoff_location: null,
         estimated_distance_km: estimated_distance_km ?? null,

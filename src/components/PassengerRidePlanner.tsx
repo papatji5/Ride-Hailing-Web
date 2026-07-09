@@ -73,6 +73,8 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD">("CASH");
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [scheduledAt, setScheduledAt] = useState<string>("");
+  const [scheduledError, setScheduledError] = useState<string | null>(null);
 
   const [straightDistance, setStraightDistance] = useState<number | null>(null);
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
@@ -363,6 +365,18 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
       }
     }
 
+    if (scheduledAt) {
+      const proposedDate = new Date(scheduledAt);
+      if (isNaN(proposedDate.getTime())) {
+        setScheduledError("Scheduled pickup time is invalid.");
+        return;
+      }
+      if (proposedDate.getTime() < Date.now()) {
+        setScheduledError("Scheduled pickup time must be in the future.");
+        return;
+      }
+    }
+
     if (paymentMethod === "CASH") {
       // Direct cash payment: submit form immediately
       const formData = new FormData(e.currentTarget);
@@ -388,6 +402,7 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
           body: JSON.stringify({
             pickup_address: pickupAddressValue,
             dropoff_address: dropoffAddressValue,
+            scheduled_at: scheduledAt || null,
             estimated_distance_km: effectiveDistance ? effectiveDistance / 1000 : null,
             estimated_duration_min: effectiveDuration ? effectiveDuration / 60 : null,
             estimated_fare_cents: fareEstimate ? Math.round(fareEstimate.fare * 100) : null,
@@ -633,6 +648,48 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
           </div>
         </div>
 
+        <div className="rounded-[28px] border border-slate-700/70 bg-slate-900/90 p-5 text-sm text-slate-200 shadow-[0_25px_75px_rgba(15,23,42,0.28)]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-xs uppercase tracking-[0.22em] text-slate-400">Schedule pickup</div>
+              <div className="mt-2 text-sm text-slate-300">Leave blank for ASAP or choose a future pickup time.</div>
+            </div>
+            <span className="inline-flex rounded-full bg-slate-800/90 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-300 ring-1 ring-slate-700/80">
+              {scheduledAt ? "Scheduled" : "ASAP"}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <input
+              type="datetime-local"
+              name="scheduled_at"
+              value={scheduledAt}
+              min={new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+                .toISOString()
+                .slice(0, 16)}
+              onChange={(event) => {
+                setScheduledError(null);
+                setScheduledAt(event.target.value);
+              }}
+              className="w-full rounded-[28px] border border-slate-700/80 bg-slate-950/95 px-5 py-3 text-sm text-white outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
+            />
+            <button
+              type="button"
+              className="rounded-full border border-slate-700/80 bg-slate-900/95 px-4 py-3 text-sm text-slate-200 transition hover:border-cyan-400"
+              onClick={() => {
+                setScheduledAt("");
+                setScheduledError(null);
+              }}
+            >
+              Clear
+            </button>
+          </div>
+          {scheduledError ? (
+            <div className="mt-3 rounded-2xl bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{scheduledError}</div>
+          ) : (
+            <div className="mt-3 text-xs text-slate-400">If you choose a future time, the ride will be scheduled for that pickup.</div>
+          )}
+        </div>
+
         <div className="rounded-lg border border-white/10 bg-slate-900/80 p-3 text-sm text-slate-200">
           <div className="text-xs uppercase tracking-wide text-slate-400">Estimate</div>
           <div className="mt-2 font-medium text-white">Straight: {formatMeters(straightDistance)}</div>
@@ -696,6 +753,7 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
         <input type="hidden" name="pickup_lat" value={pickup?.lat?.toString() ?? ""} />
         <input type="hidden" name="dropoff_lng" value={dropoff?.lng?.toString() ?? ""} />
         <input type="hidden" name="dropoff_lat" value={dropoff?.lat?.toString() ?? ""} />
+        <input type="hidden" name="scheduled_at" value={scheduledAt} />
         <input type="hidden" name="estimated_distance_km" value={effectiveDistance != null ? (effectiveDistance / 1000).toFixed(3) : ""} />
         <input type="hidden" name="estimated_duration_min" value={effectiveDuration != null ? (effectiveDuration / 60).toFixed(2) : ""} />
         <input type="hidden" name="estimated_fare_cents" value={fareEstimate ? Math.round(fareEstimate.fare * 100).toString() : ""} />

@@ -169,6 +169,7 @@ create table if not exists public.rides (
   pickup_address text,
   dropoff_location geography(point,4326),
   dropoff_address text,
+  scheduled_at timestamptz,
 
   estimated_distance_km numeric,
   estimated_duration_min numeric,
