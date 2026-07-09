@@ -75,6 +75,7 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [scheduledAt, setScheduledAt] = useState<string>("");
   const [scheduledError, setScheduledError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const [straightDistance, setStraightDistance] = useState<number | null>(null);
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
@@ -380,7 +381,13 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
     if (paymentMethod === "CASH") {
       // Direct cash payment: submit form immediately
       const formData = new FormData(e.currentTarget);
-      await requestRideAction(formData);
+      try {
+        await requestRideAction(formData);
+        setStatusMessage("Ride requested successfully. A driver will be assigned shortly.");
+      } catch (err) {
+        setPaymentError(err instanceof Error ? err.message : String(err));
+      }
+      return;
     } else if (paymentMethod === "CARD") {
       // Card payment: create ride + redirect to Stripe checkout
       if (!fareEstimate || !pickupAddressValue || !dropoffAddressValue) {
@@ -786,6 +793,11 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
         {paymentProcessing && paymentMethod === "CARD" ? (
           <div className="mt-2 rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-100">
             Redirecting to Stripe payment...
+          </div>
+        ) : null}
+        {statusMessage ? (
+          <div className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-900">
+            {statusMessage}
           </div>
         ) : null}
       </form>
