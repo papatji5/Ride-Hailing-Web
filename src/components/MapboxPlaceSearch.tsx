@@ -38,38 +38,42 @@ export default function MapboxPlaceSearch({
       setLoading(true);
       try {
         // South Africa bounding box: [minLon, minLat, maxLon, maxLat]
-        // Approximately: 16.3°E to 32.8°E, -35°S to -22°S
         const saBbox = "16.3,-35,32.8,-22";
         const proximityCoords = "28.2293,-25.7461"; // Johannesburg center
         
-        // Search with bbox constraint to ensure results are within South Africa
-        // Include all relevant types for places and POIs
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+        // Try Mapbox first
+        const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
           q,
-        )}.json?autocomplete=true&bbox=${saBbox}&proximity=${proximityCoords}&limit=15&types=place,region,address,poi,landmark&access_token=${token}`;
+        )}.json?autocomplete=true&bbox=${saBbox}&proximity=${proximityCoords}&limit=10&types=place,region,address,poi,landmark&access_token=${token}`;
         
-        let res = await fetch(url, { signal: abortRef.current.signal });
+        let res = await fetch(mapboxUrl, { signal: abortRef.current.signal });
         let json = await res.json();
         let features = json.features || [];
         
-        // If few results, do a secondary search without strict filtering
+        // If no good results from Mapbox, try OpenStreetMap Nominatim (better for South African POIs)
         if (features.length < 3) {
-          const broadUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-            q,
-          )}.json?autocomplete=true&proximity=${proximityCoords}&limit=15&access_token=${token}`;
-          res = await fetch(broadUrl, { signal: abortRef.current.signal });
-          json = await res.json();
-          const broadFeatures = json.features || [];
-          
-          // Filter to prioritize South African results
-          const saResults = broadFeatures.filter((f: Feature) => {
-            const name = (f.place_name || "").toLowerCase();
-            return name.includes("south africa") || name.includes("sa") || name.includes("johannesburg") ||
-                   name.includes("cape town") || name.includes("durban") || name.includes("pretoria") ||
-                   name.includes("gauteng") || name.includes("kwazulu") || name.includes("western cape");
-          });
-          
-          features = saResults.length > 0 ? saResults : broadFeatures.slice(0, 15);
+          try {
+            const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+              q + " South Africa"
+            )}&format=json&limit=10&viewbox=16.3,-35,32.8,-22&bounded=1`;
+            
+            const nominatimRes = await fetch(nominatimUrl, { signal: abortRef.current.signal });
+            const nominatimData = await nominatimRes.json();
+            
+            // Convert Nominatim results to Mapbox format
+            if (Array.isArray(nominatimData) && nominatimData.length > 0) {
+              const nominatimFeatures: Feature[] = nominatimData.map((item: any, idx: number) => ({
+                id: `nominatim-${idx}`,
+                place_name: item.display_name,
+                text: item.name || item.display_name.split(",")[0],
+                center: [parseFloat(item.lon), parseFloat(item.lat)],
+              }));
+              features = nominatimFeatures;
+            }
+          } catch (nominatimErr) {
+            // Silently fail nominatim, use whatever Mapbox returned
+            console.debug("Nominatim fallback failed:", nominatimErr);
+          }
         }
         
         setResults(features);
