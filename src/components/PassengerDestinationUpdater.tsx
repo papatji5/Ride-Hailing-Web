@@ -21,6 +21,18 @@ type FareBreakdown = {
   breakdown: { base: number; distanceCharge: number; timeCharge: number };
 };
 
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371e3; // metres
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+  const dPhi = toRad(lat2 - lat1);
+  const dLambda = toRad(lon2 - lon1);
+  const a = Math.sin(dPhi / 2) * Math.sin(dPhi / 2) + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 const fareConfig = {
   baseFare: 15,
   perKm: 7,
@@ -143,6 +155,8 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
   const [mapError, setMapError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const lastFitRef = useRef<number | null>(null);
+  const lastDriverRef = useRef<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     if (!mapEl.current) return;
@@ -242,20 +256,37 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
         .addTo(map);
     }
 
-    // Fit bounds to include all relevant points
+    // Fit bounds to include all relevant points, but avoid refitting on every small driver update.
     const bounds = new mapboxgl.LngLatBounds();
-    if (driverLocation) {
-      bounds.extend([driverLocation.lng, driverLocation.lat]);
+    if (driverLocation) bounds.extend([driverLocation.lng, driverLocation.lat]);
+    if (pickupPoint) bounds.extend([pickupPoint.lng, pickupPoint.lat]);
+    if (dropoffPoint) bounds.extend([dropoffPoint.lng, dropoffPoint.lat]);
+
+    if (!bounds.getNorthEast() || !bounds.getSouthWest()) return;
+
+    // Decide whether to refit: only if enough time passed or driver moved significantly.
+    const now = Date.now();
+    const MIN_REFIT_MS = 5000; // at least 5s between camera changes
+    const DISTANCE_THRESHOLD_METERS = 200; // refit if driver moved >200m
+
+    let shouldFit = false;
+    if (!lastFitRef.current) {
+      shouldFit = true;
+    } else if (now - (lastFitRef.current ?? 0) > MIN_REFIT_MS) {
+      shouldFit = true;
+    } else if (driverLocation && lastDriverRef.current) {
+      const d = haversineDistance(driverLocation.lat, driverLocation.lng, lastDriverRef.current.lat, lastDriverRef.current.lng);
+      if (d > DISTANCE_THRESHOLD_METERS) shouldFit = true;
     }
-    if (pickupPoint) {
-      bounds.extend([pickupPoint.lng, pickupPoint.lat]);
-    }
-    if (dropoffPoint) {
-      bounds.extend([dropoffPoint.lng, dropoffPoint.lat]);
-    }
-    
-    if (bounds.getNorthEast() && bounds.getSouthWest()) {
-      map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+
+    if (shouldFit) {
+      try {
+        map.fitBounds(bounds, { padding: 60, maxZoom: 14 });
+        lastFitRef.current = now;
+        lastDriverRef.current = driverLocation ?? null;
+      } catch (e) {
+        // Ignore if map unmounted
+      }
     }
   }, [pickupPoint, dropoffPoint, driverLocation]);
 
