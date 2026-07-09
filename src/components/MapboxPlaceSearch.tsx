@@ -37,30 +37,64 @@ export default function MapboxPlaceSearch({
       abortRef.current = new AbortController();
       setLoading(true);
       try {
-        // South Africa bounding box: [minLon, minLat, maxLon, maxLat]
-        const saBbox = "16.3,-35,32.8,-22";
-        const proximityCoords = "28.2293,-25.7461"; // Johannesburg center
-        
         // Try Mapbox first
         const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
           q,
-        )}.json?autocomplete=true&bbox=${saBbox}&proximity=${proximityCoords}&limit=10&types=place,region,address,poi,landmark&access_token=${token}`;
+        )}.json?autocomplete=true&proximity=28.2293,-25.7461&limit=10&access_token=${token}`;
         
         let res = await fetch(mapboxUrl, { signal: abortRef.current.signal });
         let json = await res.json();
         let features = json.features || [];
         
-        // If no good results from Mapbox, try OpenStreetMap Nominatim (better for South African POIs)
+        // If no good results, try Overpass API for OSM POI data (better for businesses)
+        if (features.length < 3) {
+          try {
+            // Overpass API query to find nodes/ways with names matching the search in South Africa bbox
+            const overpassQuery = `[bbox=-35,16.3,-22,32.8];(node["name"~"${q}",i];way["name"~"${q}",i];);out center;`;
+            const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+            
+            const overpassRes = await fetch(overpassUrl, { signal: abortRef.current.signal });
+            const overpassData = await overpassRes.json();
+            
+            if (overpassData.elements && Array.isArray(overpassData.elements)) {
+              const overpassFeatures: Feature[] = overpassData.elements
+                .filter((el: any) => el.lat && el.lon && el.tags?.name)
+                .slice(0, 10)
+                .map((el: any, idx: number) => {
+                  const lat = el.center?.lat || el.lat;
+                  const lon = el.center?.lon || el.lon;
+                  const tags = el.tags || {};
+                  const name = tags.name || "";
+                  const type = tags.amenity || tags.shop || tags.tourism || "location";
+                  const fullName = `${name}${tags.addr_street ? ", " + tags.addr_street : ""}${tags.addr_city ? ", " + tags.addr_city : ""}, South Africa`;
+                  
+                  return {
+                    id: `osm-${el.id}`,
+                    place_name: fullName,
+                    text: name,
+                    center: [lon, lat],
+                  };
+                });
+              
+              if (overpassFeatures.length > 0) {
+                features = overpassFeatures;
+              }
+            }
+          } catch (overpassErr) {
+            console.debug("Overpass fallback failed:", overpassErr);
+          }
+        }
+        
+        // Third fallback: Nominatim for general places
         if (features.length < 3) {
           try {
             const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
-              q + " South Africa"
+              q
             )}&format=json&limit=10&viewbox=16.3,-35,32.8,-22&bounded=1`;
             
             const nominatimRes = await fetch(nominatimUrl, { signal: abortRef.current.signal });
             const nominatimData = await nominatimRes.json();
             
-            // Convert Nominatim results to Mapbox format
             if (Array.isArray(nominatimData) && nominatimData.length > 0) {
               const nominatimFeatures: Feature[] = nominatimData.map((item: any, idx: number) => ({
                 id: `nominatim-${idx}`,
@@ -71,7 +105,6 @@ export default function MapboxPlaceSearch({
               features = nominatimFeatures;
             }
           } catch (nominatimErr) {
-            // Silently fail nominatim, use whatever Mapbox returned
             console.debug("Nominatim fallback failed:", nominatimErr);
           }
         }
