@@ -57,6 +57,8 @@ export default function DriverLocationAutoTracker() {
   const lastPushTimeRef = useRef<number>(0);
   const lastUiUpdateRef = useRef<number>(0);
   const lastFocusRef = useRef<{ address: string | null; mode: "pickup" | "destination" | null; ts: number } | null>(null);
+  const UI_UPDATE_INTERVAL_ACTIVE = 60_000; // when driving, update UI at most once per minute
+  const UI_UPDATE_INTERVAL_IDLE = 2_000; // when idle, update UI at most once per 2s
   const [activeRideId, setActiveRideId] = useState<string | null>(null);
   const [navTarget, setNavTarget] = useState<{ mode: "pickup" | "destination"; address: string } | null>(null);
   const [targetCoords, setTargetCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -126,9 +128,10 @@ export default function DriverLocationAutoTracker() {
 
   function renderLocation(nextLat: number, nextLng: number) {
     const now = Date.now();
+    const threshold = routeIdRef.current ? UI_UPDATE_INTERVAL_ACTIVE : UI_UPDATE_INTERVAL_IDLE;
     // Update internal marker immediately, but only update React state (which affects UI layout)
-    // at most once every 2s to avoid UI jitter on mobile.
-    if (now - lastUiUpdateRef.current > 2000) {
+    // at most once per `threshold` to avoid UI jitter on mobile while driving.
+    if (now - lastUiUpdateRef.current > threshold) {
       try {
         setLat(nextLat);
         setLng(nextLng);
@@ -209,7 +212,8 @@ export default function DriverLocationAutoTracker() {
         renderLocation(nextLat, nextLng);
         setError(null);
         const now = Date.now();
-        if (now - lastUiUpdateRef.current > 2000) {
+        const threshold = routeIdRef.current ? UI_UPDATE_INTERVAL_ACTIVE : UI_UPDATE_INTERVAL_IDLE;
+        if (now - lastUiUpdateRef.current > threshold) {
           setStatus(
             position.coords.accuracy
               ? `Location detected (accuracy ~${Math.round(position.coords.accuracy)}m)`
@@ -485,7 +489,14 @@ export default function DriverLocationAutoTracker() {
         map.easeTo({ center: [target.lng, target.lat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
       }
 
-      setStatus(`${type === "pickup" ? "Pickup" : "Destination"} loaded: ${targetAddress}`);
+      // Only update visible status when not actively driving, or if enough time elapsed
+      try {
+        const now = Date.now();
+        if (!routeIdRef.current || now - lastUiUpdateRef.current > UI_UPDATE_INTERVAL_ACTIVE) {
+          setStatus(`${type === "pickup" ? "Pickup" : "Destination"} loaded: ${targetAddress}`);
+          lastUiUpdateRef.current = now;
+        }
+      } catch {}
       // record last focused target to avoid re-focusing repeatedly
       try {
         lastFocusRef.current = { address: targetAddress, mode: type, ts: Date.now() };
