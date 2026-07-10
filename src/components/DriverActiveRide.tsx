@@ -93,7 +93,7 @@ export default function DriverActiveRide() {
         }),
       );
     }
-    if (navMode === "driveToDestination") {
+    if (navMode === "driveToDestination" || navMode === "finishRide") {
       window.dispatchEvent(
         new CustomEvent("driverNavTarget", {
           detail: {

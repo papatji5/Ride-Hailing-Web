@@ -307,15 +307,18 @@ export default function DriverLocationAutoTracker() {
                   try {
                     const parsed = JSON.parse(savedTarget);
                     if (parsed?.mode && parsed?.address) {
+                      setNavTarget({ mode: parsed.mode === 'destination' ? 'destination' : 'pickup', address: parsed.address });
                       void focusOnRide(data.id, parsed.mode === 'destination' ? 'destination' : 'pickup', parsed.address, lat, lng);
                     }
                   } catch (e) {}
                 } else {
                   const key = `driverNavMode_${data.id}`;
                   const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
-                  if (saved === "driveToDestination") {
+                  if (saved === "driveToDestination" || saved === "finishRide") {
+                    setNavTarget({ mode: 'destination', address: data?.dropoff_address ?? '' });
                     void focusOnRide(data.id, "destination", data?.dropoff_address ?? null, lat, lng);
                   } else if (saved === "driveToPickup") {
+                    setNavTarget({ mode: 'pickup', address: data?.pickup_address ?? '' });
                     void focusOnRide(data.id, "pickup", data?.pickup_address ?? null, lat, lng);
                   }
                 }
@@ -327,7 +330,7 @@ export default function DriverLocationAutoTracker() {
               try {
                 const key = `driverNavMode_${data.id}`;
                 const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
-                if (saved === "driveToDestination" && !targetCoords) {
+                if ((saved === "driveToDestination" || saved === "finishRide") && !targetCoords) {
                   void focusOnRide(data.id, "destination", data?.dropoff_address ?? null, lat, lng);
                 }
               } catch (e) {}
@@ -565,11 +568,15 @@ export default function DriverLocationAutoTracker() {
           } catch (e) {}
         } else {
           const saved = window.localStorage.getItem(`driverNavMode_${initialId}`);
-          if (saved === "driveToDestination") {
+          if (saved === "driveToDestination" || saved === "finishRide") {
+            setNavTarget({ mode: 'destination', address: new URLSearchParams(window.location.search).get("dropoffAddress") ?? '' });
             void focusOnRide(initialId, "destination", null, lat, lng);
           } else {
             const initialPickup = new URLSearchParams(window.location.search).get("pickupAddress");
-            if (initialPickup) void focusOnRide(initialId, "pickup", initialPickup, lat, lng);
+            if (initialPickup) {
+              setNavTarget({ mode: 'pickup', address: initialPickup });
+              void focusOnRide(initialId, "pickup", initialPickup, lat, lng);
+            }
           }
         }
       } catch (e) {}
