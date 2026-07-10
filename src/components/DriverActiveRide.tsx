@@ -135,6 +135,10 @@ export default function DriverActiveRide() {
       try {
         const key = `driverNavMode_${activeRide.id}`;
         window.localStorage.removeItem(key);
+        try {
+          const tkey = `driverNavTarget_${activeRide.id}`;
+          window.localStorage.removeItem(tkey);
+        } catch {}
       } catch {}
       try {
         const chatKey = `rideChat_${activeRide.id}`;
@@ -184,6 +188,10 @@ export default function DriverActiveRide() {
                   try {
                     const key = `driverNavMode_${activeRide.id}`;
                     window.localStorage.setItem(key, "driveToPickup");
+                    try {
+                      const tkey = `driverNavTarget_${activeRide.id}`;
+                      window.localStorage.setItem(tkey, JSON.stringify({ mode: 'pickup', address: activeRide.pickup_address }));
+                    } catch {}
                   } catch {}
                   return;
                 }
@@ -202,6 +210,10 @@ export default function DriverActiveRide() {
                   try {
                     const key = `driverNavMode_${activeRide.id}`;
                     window.localStorage.setItem(key, "finishRide");
+                    try {
+                      const tkey = `driverNavTarget_${activeRide.id}`;
+                      window.localStorage.setItem(tkey, JSON.stringify({ mode: 'destination', address: activeRide.dropoff_address }));
+                    } catch {}
                   } catch {}
                   return;
                 }
@@ -236,6 +248,10 @@ export default function DriverActiveRide() {
                   try {
                     const key = `driverNavMode_${activeRide.id}`;
                     window.localStorage.setItem(key, "driveToDestination");
+                  } catch {}
+                  try {
+                    const tkey = `driverNavTarget_${activeRide.id}`;
+                    window.localStorage.setItem(tkey, JSON.stringify({ mode: 'destination', address: activeRide.dropoff_address }));
                   } catch {}
                   window.dispatchEvent(
                     new CustomEvent("driverNavTarget", {

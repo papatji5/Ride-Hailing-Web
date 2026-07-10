@@ -64,6 +64,7 @@ export default function DriverLocationAutoTracker() {
   const [lng, setLng] = useState<number | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number } | null>(null);
+  const lastRouteFromRef = useRef<{ lat: number; lng: number; ts: number } | null>(null);
 
   async function pushLocation(nextLat: number, nextLng: number) {
     const signature = `${nextLat.toFixed(6)},${nextLng.toFixed(6)}`;
@@ -78,6 +79,7 @@ export default function DriverLocationAutoTracker() {
         body: JSON.stringify({ lat: nextLat, lng: nextLng }),
       });
       const data = await res.json().catch(() => null);
+      console.debug('pushLocation response', { ok: res.ok, status: res.status, data });
       if (!res.ok) throw new Error(data?.error ?? "Unable to save location");
 
       setUpdatedAt(new Date());
@@ -223,14 +225,25 @@ export default function DriverLocationAutoTracker() {
               setActiveRideId(data.id);
               joinRide(data.id, { role: "DRIVER" });
 
-              // Restore saved nav mode for this ride so refresh doesn't reset the driver flow
+              // Restore saved explicit nav target (preferred) or saved nav mode
               try {
-                const key = `driverNavMode_${data.id}`;
-                const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
-                if (saved === "driveToDestination") {
-                  void focusOnRide(data.id, "destination", data?.dropoff_address ?? null, lat, lng);
-                } else if (saved === "driveToPickup") {
-                  void focusOnRide(data.id, "pickup", data?.pickup_address ?? null, lat, lng);
+                const tkey = `driverNavTarget_${data.id}`;
+                const savedTarget = typeof window !== "undefined" ? window.localStorage.getItem(tkey) : null;
+                if (savedTarget) {
+                  try {
+                    const parsed = JSON.parse(savedTarget);
+                    if (parsed?.mode && parsed?.address) {
+                      void focusOnRide(data.id, parsed.mode === 'destination' ? 'destination' : 'pickup', parsed.address, lat, lng);
+                    }
+                  } catch (e) {}
+                } else {
+                  const key = `driverNavMode_${data.id}`;
+                  const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+                  if (saved === "driveToDestination") {
+                    void focusOnRide(data.id, "destination", data?.dropoff_address ?? null, lat, lng);
+                  } else if (saved === "driveToPickup") {
+                    void focusOnRide(data.id, "pickup", data?.pickup_address ?? null, lat, lng);
+                  }
                 }
               } catch (e) {
                 // ignore
@@ -286,6 +299,17 @@ export default function DriverLocationAutoTracker() {
   }
 
   async function drawRoute(from: { lat: number; lng: number }, to: { lat: number; lng: number }) {
+    const now = Date.now();
+    const last = lastRouteFromRef.current;
+    // Avoid re-requesting the route too frequently — require 15s or >30m move
+    if (last) {
+      const dLat = from.lat - last.lat;
+      const dLng = from.lng - last.lng;
+      const moved = Math.sqrt(dLat * dLat + dLng * dLng) * 111000; // approx meters
+      if (now - last.ts < 15000 && moved < 30) {
+        return;
+      }
+    }
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
     const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=polyline6&access_token=${token}`;
     const res = await fetch(url);
@@ -326,6 +350,7 @@ export default function DriverLocationAutoTracker() {
       distanceKm: Math.round((route.distance / 1000) * 10) / 10,
       durationMin: Math.round((route.duration / 60) * 10) / 10,
     });
+    lastRouteFromRef.current = { lat: from.lat, lng: from.lng, ts: now };
   }
 
   async function getCurrentLocation(): Promise<{ lat: number; lng: number } | null> {
@@ -437,19 +462,27 @@ export default function DriverLocationAutoTracker() {
 
     const initialId = new URLSearchParams(window.location.search).get("activeRideId");
     if (initialId) {
-      let saved: string | null = null;
       try {
-        saved = window.localStorage.getItem(`driverNavMode_${initialId}`);
-      } catch {}
-
-      if (saved === "driveToDestination") {
-        // Restore destination nav if driver was already heading to destination
-        void focusOnRide(initialId, "destination", null, lat, lng);
-      } else {
-        // Prefer pickup from saved state or URL if no saved destination
-        const initialPickup = new URLSearchParams(window.location.search).get("pickupAddress");
-        if (initialPickup) void focusOnRide(initialId, "pickup", initialPickup, lat, lng);
-      }
+        const tkey = `driverNavTarget_${initialId}`;
+        const savedTarget = window.localStorage.getItem(tkey);
+        if (savedTarget) {
+          try {
+            const parsed = JSON.parse(savedTarget);
+            if (parsed?.mode && parsed?.address) {
+              setNavTarget({ mode: parsed.mode, address: parsed.address });
+              void focusOnRide(initialId, parsed.mode === 'destination' ? 'destination' : 'pickup', parsed.address, lat, lng);
+            }
+          } catch (e) {}
+        } else {
+          const saved = window.localStorage.getItem(`driverNavMode_${initialId}`);
+          if (saved === "driveToDestination") {
+            void focusOnRide(initialId, "destination", null, lat, lng);
+          } else {
+            const initialPickup = new URLSearchParams(window.location.search).get("pickupAddress");
+            if (initialPickup) void focusOnRide(initialId, "pickup", initialPickup, lat, lng);
+          }
+        }
+      } catch (e) {}
     }
 
     return () => {
