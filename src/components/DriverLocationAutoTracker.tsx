@@ -68,6 +68,8 @@ export default function DriverLocationAutoTracker() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number } | null>(null);
   const lastRouteFromRef = useRef<{ lat: number; lng: number; ts: number } | null>(null);
+  const latestPosRef = useRef<{ lat: number; lng: number } | null>(null);
+  const saveIntervalRef = useRef<number | null>(null);
 
   async function pushLocation(nextLat: number, nextLng: number) {
     const now = Date.now();
@@ -217,8 +219,10 @@ export default function DriverLocationAutoTracker() {
         }
 
         if (routeIdRef.current) {
+          // Emit immediate socket updates for live tracking
           sendDriverLocation(routeIdRef.current, nextLat, nextLng);
-          void pushLocation(nextLat, nextLng);
+          // Buffer latest position for background save
+          latestPosRef.current = { lat: nextLat, lng: nextLng };
         }
       },
       (err) => {
@@ -236,6 +240,38 @@ export default function DriverLocationAutoTracker() {
       if (watchIdRef.current != null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
+    };
+  }, []);
+
+  // Background saver: periodically send the latest buffered position to the server
+  useEffect(() => {
+    // Run every 5s when a route is active
+    function startInterval() {
+      if (saveIntervalRef.current != null) return;
+      saveIntervalRef.current = window.setInterval(() => {
+        const pos = latestPosRef.current;
+        if (!pos) return;
+        if (!routeIdRef.current) return;
+        void pushLocation(pos.lat, pos.lng);
+      }, 5000) as unknown as number;
+    }
+
+    function stopInterval() {
+      if (saveIntervalRef.current != null) {
+        window.clearInterval(saveIntervalRef.current as unknown as number);
+        saveIntervalRef.current = null;
+      }
+    }
+
+    // Start when there's an active ride
+    const checkActive = setInterval(() => {
+      if (routeIdRef.current) startInterval();
+      else stopInterval();
+    }, 1000);
+
+    return () => {
+      clearInterval(checkActive);
+      stopInterval();
     };
   }, []);
 
