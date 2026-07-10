@@ -55,6 +55,7 @@ export default function DriverLocationAutoTracker() {
   const routeSourceId = "driver-nav-route";
   const lastSentRef = useRef<string>("");
   const lastPushTimeRef = useRef<number>(0);
+  const lastUiUpdateRef = useRef<number>(0);
   const lastFocusRef = useRef<{ address: string | null; mode: "pickup" | "destination" | null; ts: number } | null>(null);
   const [activeRideId, setActiveRideId] = useState<string | null>(null);
   const [navTarget, setNavTarget] = useState<{ mode: "pickup" | "destination"; address: string } | null>(null);
@@ -70,7 +71,7 @@ export default function DriverLocationAutoTracker() {
 
   async function pushLocation(nextLat: number, nextLng: number) {
     const now = Date.now();
-    // Throttle pushes to reduce network and UI churn (min 2s)
+    // Throttle pushes to reduce network churn (min 2s)
     if (now - lastPushTimeRef.current < 2000) return;
     lastPushTimeRef.current = now;
 
@@ -78,30 +79,38 @@ export default function DriverLocationAutoTracker() {
     if (lastSentRef.current === signature) return;
     lastSentRef.current = signature;
 
-    setSaving(true);
+    // Send the location in background - do not update UI on every save to avoid jitter
     try {
-      const res = await fetch("/api/driver/location", {
+      void fetch("/api/driver/location", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lat: nextLat, lng: nextLng }),
-      });
-      const data = await res.json().catch(() => null);
-      console.debug('pushLocation response', { ok: res.ok, status: res.status, data });
-      if (!res.ok) throw new Error(data?.error ?? "Unable to save location");
+        keepalive: true,
+      })
+        .then(async (res) => {
+          const data = await res.json().catch(() => null);
+          console.debug("pushLocation response", { ok: res.ok, status: res.status, data });
+          if (!res.ok) console.debug("Background location save failed", data?.error ?? res.status);
+        })
+        .catch((e) => console.debug("Background location save error", e));
+    } catch (e) {
+      console.debug("Background location send failed", e);
+    }
 
-      setUpdatedAt(new Date());
-      setStatus("Location saved.");
+    // Emit via socket (still immediate)
+    if (routeIdRef.current) {
+      sendDriverLocation(routeIdRef.current, nextLat, nextLng);
+    }
 
-      // Emit location via Socket.IO for live tracking
-      if (routeIdRef.current) {
-        sendDriverLocation(routeIdRef.current, nextLat, nextLng);
-      }
+    // Only update UI state (status / last saved / trigger focus) at most every 15s
+    if (now - lastUiUpdateRef.current > 15000) {
+      lastUiUpdateRef.current = now;
+      try {
+        setUpdatedAt(new Date());
+        setStatus("Location saved.");
+      } catch {}
 
-      if (window.location.pathname === "/driver" && window.location.search.includes("error=")) {
-        window.history.replaceState({}, "", window.location.pathname + window.location.search);
-      }
-
-      // Only trigger a focus refresh when the nav target changed or enough time has passed
+      // Trigger focus refresh less frequently
       if (routeIdRef.current && navTarget?.address) {
         const last = lastFocusRef.current;
         const sameTarget = last && last.address === navTarget.address && last.mode === navTarget.mode;
@@ -110,16 +119,20 @@ export default function DriverLocationAutoTracker() {
           lastFocusRef.current = { address: navTarget.address, mode: navTarget.mode, ts: now };
         }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save location.");
-    } finally {
-      setSaving(false);
     }
   }
 
   function renderLocation(nextLat: number, nextLng: number) {
-    setLat(nextLat);
-    setLng(nextLng);
+    const now = Date.now();
+    // Update internal marker immediately, but only update React state (which affects UI layout)
+    // at most once every 2s to avoid UI jitter on mobile.
+    if (now - lastUiUpdateRef.current > 2000) {
+      try {
+        setLat(nextLat);
+        setLng(nextLng);
+        lastUiUpdateRef.current = now;
+      } catch {}
+    }
     const map = mapRef.current;
     if (map) {
       if (markerRef.current) {
@@ -193,11 +206,15 @@ export default function DriverLocationAutoTracker() {
         const nextLng = position.coords.longitude;
         renderLocation(nextLat, nextLng);
         setError(null);
-        setStatus(
-          position.coords.accuracy
-            ? `Location detected (accuracy ~${Math.round(position.coords.accuracy)}m)`
-            : "Location detected",
-        );
+        const now = Date.now();
+        if (now - lastUiUpdateRef.current > 2000) {
+          setStatus(
+            position.coords.accuracy
+              ? `Location detected (accuracy ~${Math.round(position.coords.accuracy)}m)`
+              : "Location detected",
+          );
+          lastUiUpdateRef.current = now;
+        }
 
         if (routeIdRef.current) {
           sendDriverLocation(routeIdRef.current, nextLat, nextLng);
