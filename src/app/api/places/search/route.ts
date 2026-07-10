@@ -10,49 +10,57 @@ export async function GET(req: Request) {
     }
 
     const googleKey = process.env.GOOGLE_PLACES_API_KEY;
-    const results: any[] = [];
+    console.log("Place search query:", q, "Google key available:", !!googleKey);
 
     // Try Google Places API Text Search (best for South African business search)
     if (googleKey) {
       try {
-        // Use Google Places API Text Search
-        // South Africa center and region
-        const googleUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(q + " South Africa")}&key=${googleKey}&language=en&region=za`;
+        // Search with just the query + South Africa region
+        const searchQuery = `${q} South Africa`;
+        const googleUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(searchQuery)}&key=${googleKey}&language=en&region=za`;
         
+        console.log("Calling Google Places API...");
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
         
         const response = await fetch(googleUrl, { signal: controller.signal });
         clearTimeout(timeoutId);
         
-        if (response.ok) {
-          const data = await response.json();
+        const data = await response.json();
+        console.log("Google Places response status:", data.status, "Results:", data.results?.length || 0);
+        
+        if (data.status === "OK" && data.results && Array.isArray(data.results)) {
+          const googleResults = data.results
+            .slice(0, 15)
+            .map((place: any) => ({
+              id: place.place_id,
+              place_name: place.formatted_address || place.name,
+              text: place.name,
+              center: [place.geometry.location.lng, place.geometry.location.lat],
+              type: place.types?.[0] || "place",
+              source: "google",
+            }));
           
-          if (data.results && Array.isArray(data.results)) {
-            const googleResults = data.results
-              .slice(0, 15)
-              .map((place: any) => ({
-                id: place.place_id,
-                place_name: place.formatted_address,
-                text: place.name,
-                center: [place.geometry.location.lng, place.geometry.location.lat],
-                type: place.types?.[0] || "place",
-                source: "google",
-              }));
-            
-            return NextResponse.json({ features: googleResults });
-          }
+          console.log("Returning Google Places results:", googleResults.length);
+          return NextResponse.json({ features: googleResults });
+        } else if (data.status === "ZERO_RESULTS") {
+          console.log("Google Places returned ZERO_RESULTS");
+        } else {
+          console.log("Google Places status:", data.status, data.error_message);
         }
       } catch (err) {
-        console.debug("Google Places API error:", err instanceof Error ? err.message : err);
+        console.error("Google Places API error:", err instanceof Error ? err.message : err);
       }
+    } else {
+      console.warn("No Google API key available");
     }
 
-    // Fallback to Mapbox if Google fails
+    // Fallback to Mapbox
     try {
       const mapboxToken = process.env.MAPBOX_SERVER_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
       if (mapboxToken) {
-        const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?limit=15&bbox=16.3,-35,32.8,-22&proximity=28.2293,-25.7461&access_token=${mapboxToken}`;
+        console.log("Falling back to Mapbox...");
+        const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?limit=15&bbox=16.3,-35,32.8,-22&proximity=28.2293,-25.7461&types=place,poi,address&access_token=${mapboxToken}`;
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -73,17 +81,19 @@ export async function GET(req: Request) {
                 source: "mapbox",
               }));
             
+            console.log("Returning Mapbox results:", mapboxResults.length);
             return NextResponse.json({ features: mapboxResults });
           }
         }
       }
     } catch (err) {
-      console.debug("Mapbox fallback error:", err instanceof Error ? err.message : err);
+      console.error("Mapbox fallback error:", err instanceof Error ? err.message : err);
     }
 
     // Final fallback to Nominatim
     try {
-      const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + " South Africa")}&format=json&limit=15&viewbox=16.3,-35,32.8,-22&bounded=1`;
+      console.log("Falling back to Nominatim...");
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + " South Africa")}&format=json&limit=15&viewbox=16.3,-35,32.8,-22&bounded=0`;
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
@@ -105,13 +115,15 @@ export async function GET(req: Request) {
               source: "nominatim",
             }));
           
+          console.log("Returning Nominatim results:", nomResults.length);
           return NextResponse.json({ features: nomResults });
         }
       }
     } catch (err) {
-      console.debug("Nominatim fallback error:", err instanceof Error ? err.message : err);
+      console.error("Nominatim fallback error:", err instanceof Error ? err.message : err);
     }
 
+    console.warn("No results found from any service");
     return NextResponse.json({ features: [] });
   } catch (err) {
     console.error("Places search error:", err);

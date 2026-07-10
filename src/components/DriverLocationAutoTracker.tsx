@@ -50,6 +50,8 @@ export default function DriverLocationAutoTracker() {
   const targetMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const routeIdRef = useRef<string | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  const lastCenterRef = useRef<{ lat: number; lng: number } | null>(null);
+  const initialMarkerPlacedRef = useRef(false);
   const routeSourceId = "driver-nav-route";
   const lastSentRef = useRef<string>("");
   const [activeRideId, setActiveRideId] = useState<string | null>(null);
@@ -105,9 +107,35 @@ export default function DriverLocationAutoTracker() {
     setLng(nextLng);
     const map = mapRef.current;
     if (map) {
-      markerRef.current?.remove();
-      markerRef.current = new mapboxgl.Marker({ color: "#22c55e" }).setLngLat([nextLng, nextLat]).addTo(map);
-      map.easeTo({ center: [nextLng, nextLat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
+      if (markerRef.current) {
+        markerRef.current.setLngLat([nextLng, nextLat]);
+      } else {
+        markerRef.current = new mapboxgl.Marker({ color: "#22c55e" }).setLngLat([nextLng, nextLat]).addTo(map);
+        // Only set initial view on first marker placement
+        map.easeTo({ center: [nextLng, nextLat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
+        initialMarkerPlacedRef.current = true;
+        lastCenterRef.current = { lat: nextLat, lng: nextLng };
+      }
+
+      // Re-center only when driver has moved significantly to avoid jitter on mobile
+      const last = lastCenterRef.current;
+      function metersBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+        const R = 6371000; // m
+        const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+        const dLon = ((b.lng - a.lng) * Math.PI) / 180;
+        const lat1 = (a.lat * Math.PI) / 180;
+        const lat2 = (b.lat * Math.PI) / 180;
+        const sinDLat = Math.sin(dLat / 2);
+        const sinDLon = Math.sin(dLon / 2);
+        const aa = sinDLat * sinDLat + sinDLon * sinDLon * Math.cos(lat1) * Math.cos(lat2);
+        const c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
+        return R * c;
+      }
+
+      if (!last || metersBetween(last, { lat: nextLat, lng: nextLng }) > 30) {
+        map.easeTo({ center: [nextLng, nextLat], duration: 1000 });
+        lastCenterRef.current = { lat: nextLat, lng: nextLng };
+      }
       if (targetCoords) {
         void drawRoute({ lat: nextLat, lng: nextLng }, targetCoords);
       }
@@ -194,6 +222,28 @@ export default function DriverLocationAutoTracker() {
               routeIdRef.current = data.id;
               setActiveRideId(data.id);
               joinRide(data.id, { role: "DRIVER" });
+
+              // Restore saved nav mode for this ride so refresh doesn't reset the driver flow
+              try {
+                const key = `driverNavMode_${data.id}`;
+                const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+                if (saved === "driveToDestination") {
+                  void focusOnRide(data.id, "destination", data?.dropoff_address ?? null, lat, lng);
+                } else if (saved === "driveToPickup") {
+                  void focusOnRide(data.id, "pickup", data?.pickup_address ?? null, lat, lng);
+                }
+              } catch (e) {
+                // ignore
+              }
+            } else {
+              // If same ride id but we haven't set a targetCoords yet, try to restore
+              try {
+                const key = `driverNavMode_${data.id}`;
+                const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+                if (saved === "driveToDestination" && !targetCoords) {
+                  void focusOnRide(data.id, "destination", data?.dropoff_address ?? null, lat, lng);
+                }
+              } catch (e) {}
             }
           } else if (routeIdRef.current) {
             leaveRide(routeIdRef.current);
@@ -303,7 +353,17 @@ export default function DriverLocationAutoTracker() {
     routeIdRef.current = rideId;
     joinRide(rideId, { role: 'DRIVER' });
     try {
-      const targetAddress = address ?? new URLSearchParams(window.location.search).get(type === "pickup" ? "pickupAddress" : "destinationAddress");
+      let targetAddress = address ?? new URLSearchParams(window.location.search).get(type === "pickup" ? "pickupAddress" : "destinationAddress");
+      // If no address provided via event or URL, try to fetch active ride details from API
+      if (!targetAddress) {
+        try {
+          const r = await fetch('/api/driver/active-ride');
+          const d = await r.json().catch(() => null);
+          if (r.ok && d) {
+            targetAddress = type === 'pickup' ? d.pickup_address : d.dropoff_address;
+          }
+        } catch {}
+      }
       if (!targetAddress) return;
 
       const target = await geocodeAddress(targetAddress);
@@ -376,8 +436,21 @@ export default function DriverLocationAutoTracker() {
     window.addEventListener("driverNavTarget", onNavTarget);
 
     const initialId = new URLSearchParams(window.location.search).get("activeRideId");
-    const initialPickup = new URLSearchParams(window.location.search).get("pickupAddress");
-    if (initialId && initialPickup) void focusOnRide(initialId, "pickup", initialPickup, lat, lng);
+    if (initialId) {
+      let saved: string | null = null;
+      try {
+        saved = window.localStorage.getItem(`driverNavMode_${initialId}`);
+      } catch {}
+
+      if (saved === "driveToDestination") {
+        // Restore destination nav if driver was already heading to destination
+        void focusOnRide(initialId, "destination", null, lat, lng);
+      } else {
+        // Prefer pickup from saved state or URL if no saved destination
+        const initialPickup = new URLSearchParams(window.location.search).get("pickupAddress");
+        if (initialPickup) void focusOnRide(initialId, "pickup", initialPickup, lat, lng);
+      }
+    }
 
     return () => {
       window.removeEventListener("rideAccepted", onRideAccepted);
