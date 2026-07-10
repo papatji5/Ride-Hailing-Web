@@ -54,6 +54,8 @@ export default function DriverLocationAutoTracker() {
   const initialMarkerPlacedRef = useRef(false);
   const routeSourceId = "driver-nav-route";
   const lastSentRef = useRef<string>("");
+  const lastPushTimeRef = useRef<number>(0);
+  const lastFocusRef = useRef<{ address: string | null; mode: "pickup" | "destination" | null; ts: number } | null>(null);
   const [activeRideId, setActiveRideId] = useState<string | null>(null);
   const [navTarget, setNavTarget] = useState<{ mode: "pickup" | "destination"; address: string } | null>(null);
   const [targetCoords, setTargetCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -67,6 +69,11 @@ export default function DriverLocationAutoTracker() {
   const lastRouteFromRef = useRef<{ lat: number; lng: number; ts: number } | null>(null);
 
   async function pushLocation(nextLat: number, nextLng: number) {
+    const now = Date.now();
+    // Throttle pushes to reduce network and UI churn (min 2s)
+    if (now - lastPushTimeRef.current < 2000) return;
+    lastPushTimeRef.current = now;
+
     const signature = `${nextLat.toFixed(6)},${nextLng.toFixed(6)}`;
     if (lastSentRef.current === signature) return;
     lastSentRef.current = signature;
@@ -94,8 +101,14 @@ export default function DriverLocationAutoTracker() {
         window.history.replaceState({}, "", window.location.pathname + window.location.search);
       }
 
+      // Only trigger a focus refresh when the nav target changed or enough time has passed
       if (routeIdRef.current && navTarget?.address) {
-        void focusOnRide(routeIdRef.current, navTarget.mode, navTarget.address, nextLat, nextLng);
+        const last = lastFocusRef.current;
+        const sameTarget = last && last.address === navTarget.address && last.mode === navTarget.mode;
+        if (!sameTarget || now - (last?.ts ?? 0) > 15000 || !targetCoords) {
+          void focusOnRide(routeIdRef.current, navTarget.mode, navTarget.address, nextLat, nextLng);
+          lastFocusRef.current = { address: navTarget.address, mode: navTarget.mode, ts: now };
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to save location.");
@@ -420,6 +433,10 @@ export default function DriverLocationAutoTracker() {
       }
 
       setStatus(`${type === "pickup" ? "Pickup" : "Destination"} loaded: ${targetAddress}`);
+      // record last focused target to avoid re-focusing repeatedly
+      try {
+        lastFocusRef.current = { address: targetAddress, mode: type, ts: Date.now() };
+      } catch {}
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("Error focusing on ride target", err);
