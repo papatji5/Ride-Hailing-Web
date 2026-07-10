@@ -294,7 +294,8 @@ export default function DriverLocationAutoTracker() {
           if (data?.id) {
             setHasActiveNavigation(true);
             setSuppressActiveState(true);
-            if (routeIdRef.current !== data.id) {
+            const needsRestore = routeIdRef.current !== data.id || !navTarget || !targetCoords;
+            if (needsRestore) {
               routeIdRef.current = data.id;
               setActiveRideId(data.id);
               joinRide(data.id, { role: "DRIVER" });
