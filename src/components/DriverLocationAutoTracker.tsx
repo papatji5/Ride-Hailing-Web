@@ -609,18 +609,30 @@ export default function DriverLocationAutoTracker() {
             <p className="text-sm text-slate-400">Automatic GPS tracking is enabled. Your location and route update live while driving.</p>
           </div>
           <div className="rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-slate-200">
-            <div>{status}</div>
-            <div className="text-xs text-slate-400">
-              {lat != null && lng != null ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : "Waiting for GPS..."}
-            </div>
-            {routeInfo ? (
-              <div className="text-xs text-cyan-300">
-                Route: {routeInfo.distanceKm.toFixed(1)} km • ETA {Math.max(1, Math.round(routeInfo.durationMin))} min
+            {activeRideId ? (
+              // Compact, non-updating banner while on an active ride to avoid layout shifts
+              <div className="flex flex-col gap-1">
+                <div className="text-sm text-emerald-300">Driving — GPS tracking active</div>
+                {routeInfo ? (
+                  <div className="text-xs text-cyan-300">Route: {routeInfo.distanceKm.toFixed(1)} km • ETA {Math.max(1, Math.round(routeInfo.durationMin))} min</div>
+                ) : null}
               </div>
-            ) : null}
-            <div className="text-xs text-emerald-300">Last saved: {formatTime(updatedAt)}</div>
-            {saving ? <div className="text-xs text-cyan-300">Saving...</div> : null}
-            {error ? <div className="text-xs text-rose-400">{error}</div> : null}
+            ) : (
+              <>
+                <div>{status}</div>
+                <div className="text-xs text-slate-400">
+                  {lat != null && lng != null ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : "Waiting for GPS..."}
+                </div>
+                {routeInfo ? (
+                  <div className="text-xs text-cyan-300">
+                    Route: {routeInfo.distanceKm.toFixed(1)} km • ETA {Math.max(1, Math.round(routeInfo.durationMin))} min
+                  </div>
+                ) : null}
+                <div className="text-xs text-emerald-300">Last saved: {formatTime(updatedAt)}</div>
+                {saving ? <div className="text-xs text-cyan-300">Saving...</div> : null}
+                {error ? <div className="text-xs text-rose-400">{error}</div> : null}
+              </>
+            )}
           </div>
           <button type="button" className="btn btn-primary" disabled>
             Automatic GPS tracking enabled
