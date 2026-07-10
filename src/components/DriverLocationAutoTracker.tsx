@@ -60,6 +60,8 @@ export default function DriverLocationAutoTracker() {
   const UI_UPDATE_INTERVAL_ACTIVE = 60_000; // when driving, update UI at most once per minute
   const UI_UPDATE_INTERVAL_IDLE = 2_000; // when idle, update UI at most once per 2s
   const [activeRideId, setActiveRideId] = useState<string | null>(null);
+  const [hasActiveNavigation, setHasActiveNavigation] = useState(false);
+  const [suppressActiveState, setSuppressActiveState] = useState(false);
   const [navTarget, setNavTarget] = useState<{ mode: "pickup" | "destination"; address: string } | null>(null);
   const [targetCoords, setTargetCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -106,8 +108,8 @@ export default function DriverLocationAutoTracker() {
       sendDriverLocation(routeIdRef.current, nextLat, nextLng);
     }
 
-    // Only update UI state (status / last saved / trigger focus) at most every 15s
-    if (now - lastUiUpdateRef.current > 15000) {
+    // Only update UI state when not suppressing active navigation state
+    if (!suppressActiveState && now - lastUiUpdateRef.current > 15000) {
       lastUiUpdateRef.current = now;
       try {
         setUpdatedAt(new Date());
@@ -131,7 +133,7 @@ export default function DriverLocationAutoTracker() {
     const threshold = routeIdRef.current ? UI_UPDATE_INTERVAL_ACTIVE : UI_UPDATE_INTERVAL_IDLE;
     // Update internal marker immediately, but only update React state (which affects UI layout)
     // at most once per `threshold` to avoid UI jitter on mobile while driving.
-    if (now - lastUiUpdateRef.current > threshold) {
+    if (!suppressActiveState && now - lastUiUpdateRef.current > threshold) {
       try {
         setLat(nextLat);
         setLng(nextLng);
@@ -213,7 +215,7 @@ export default function DriverLocationAutoTracker() {
         setError(null);
         const now = Date.now();
         const threshold = routeIdRef.current ? UI_UPDATE_INTERVAL_ACTIVE : UI_UPDATE_INTERVAL_IDLE;
-        if (now - lastUiUpdateRef.current > threshold) {
+        if (!suppressActiveState && now - lastUiUpdateRef.current > threshold) {
           setStatus(
             position.coords.accuracy
               ? `Location detected (accuracy ~${Math.round(position.coords.accuracy)}m)`
@@ -290,6 +292,8 @@ export default function DriverLocationAutoTracker() {
 
         if (res.ok) {
           if (data?.id) {
+            setHasActiveNavigation(true);
+            setSuppressActiveState(true);
             if (routeIdRef.current !== data.id) {
               routeIdRef.current = data.id;
               setActiveRideId(data.id);
@@ -332,6 +336,8 @@ export default function DriverLocationAutoTracker() {
             leaveRide(routeIdRef.current);
             routeIdRef.current = null;
             setActiveRideId(null);
+            setHasActiveNavigation(false);
+            setSuppressActiveState(false);
           }
         }
       } catch (err) {
@@ -446,6 +452,8 @@ export default function DriverLocationAutoTracker() {
   ) {
     if (!rideId) return;
     routeIdRef.current = rideId;
+    setHasActiveNavigation(true);
+    setSuppressActiveState(true);
     joinRide(rideId, { role: 'DRIVER' });
     try {
       let targetAddress = address ?? new URLSearchParams(window.location.search).get(type === "pickup" ? "pickupAddress" : "destinationAddress");
@@ -488,6 +496,7 @@ export default function DriverLocationAutoTracker() {
       } else {
         map.easeTo({ center: [target.lng, target.lat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
       }
+      setHasActiveNavigation(true);
 
       // Only update visible status when not actively driving, or if enough time elapsed
       try {
@@ -575,6 +584,8 @@ export default function DriverLocationAutoTracker() {
   useEffect(() => {
     if (!navTarget || !routeIdRef.current) return;
     if (lat == null || lng == null) return;
+    const last = lastFocusRef.current;
+    if (last?.address === navTarget.address && last.mode === navTarget.mode) return;
     void focusOnRide(routeIdRef.current, navTarget.mode, navTarget.address, lat, lng);
   }, [navTarget, lat, lng]);
 
@@ -609,13 +620,13 @@ export default function DriverLocationAutoTracker() {
             <p className="text-sm text-slate-400">Automatic GPS tracking is enabled. Your location and route update live while driving.</p>
           </div>
           <div className="rounded-lg border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-slate-200">
-            {activeRideId ? (
-              // Compact, non-updating banner while on an active ride to avoid layout shifts
-              <div className="flex flex-col gap-1">
+            {hasActiveNavigation ? (
+              // Compact, non-updating banner while on active navigation to avoid layout shifts
+              <div className="flex flex-col gap-1 min-h-[72px]">
                 <div className="text-sm text-emerald-300">Driving — GPS tracking active</div>
-                {routeInfo ? (
-                  <div className="text-xs text-cyan-300">Route: {routeInfo.distanceKm.toFixed(1)} km • ETA {Math.max(1, Math.round(routeInfo.durationMin))} min</div>
-                ) : null}
+                <div className="text-xs text-cyan-300">
+                  {routeInfo ? `Route: ${routeInfo.distanceKm.toFixed(1)} km • ETA ${Math.max(1, Math.round(routeInfo.durationMin))} min` : "Route information loading..."}
+                </div>
               </div>
             ) : (
               <>
