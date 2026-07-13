@@ -57,6 +57,7 @@ export default function DriverLocationAutoTracker() {
   const lastPushTimeRef = useRef<number>(0);
   const lastUiUpdateRef = useRef<number>(0);
   const lastFocusRef = useRef<{ address: string | null; mode: "pickup" | "destination" | null; ts: number } | null>(null);
+  const shouldFitRouteRef = useRef(false);
   const UI_UPDATE_INTERVAL_ACTIVE = 60_000; // when driving, update UI at most once per minute
   const UI_UPDATE_INTERVAL_IDLE = 2_000; // when idle, update UI at most once per 2s
   const [activeRideId, setActiveRideId] = useState<string | null>(null);
@@ -167,9 +168,12 @@ export default function DriverLocationAutoTracker() {
         return R * c;
       }
 
+      const isDestinationRoute = navTarget?.mode === 'destination' && !!targetCoords;
       if (!last || metersBetween(last, { lat: nextLat, lng: nextLng }) > 30) {
-        map.easeTo({ center: [nextLng, nextLat], duration: 1000 });
-        lastCenterRef.current = { lat: nextLat, lng: nextLng };
+        if (!shouldFitRouteRef.current && !isDestinationRoute) {
+          map.easeTo({ center: [nextLng, nextLat], duration: 1000 });
+          lastCenterRef.current = { lat: nextLat, lng: nextLng };
+        }
       }
       if (targetCoords) {
         void drawRoute({ lat: nextLat, lng: nextLng }, targetCoords);
@@ -426,6 +430,13 @@ export default function DriverLocationAutoTracker() {
       paint: { "line-color": "#3b82f6", "line-width": 5, "line-opacity": 0.9 },
     });
 
+    if (shouldFitRouteRef.current) {
+      const bounds = coords.reduce((acc, coord) => {
+        return acc.extend(coord as [number, number]);
+      }, new mapboxgl.LngLatBounds(coords[0] as [number, number], coords[0] as [number, number]));
+      map.fitBounds(bounds, { padding: 80, duration: 1000, maxZoom: 15 });
+    }
+
     setRouteInfo({
       distanceKm: Math.round((route.distance / 1000) * 10) / 10,
       durationMin: Math.round((route.duration / 60) * 10) / 10,
@@ -496,7 +507,9 @@ export default function DriverLocationAutoTracker() {
 
       if (driverLat != null && driverLng != null) {
         renderLocation(driverLat, driverLng);
+        shouldFitRouteRef.current = true;
         await drawRoute({ lat: driverLat, lng: driverLng }, target);
+        shouldFitRouteRef.current = false;
       } else {
         map.easeTo({ center: [target.lng, target.lat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
       }
@@ -534,6 +547,13 @@ export default function DriverLocationAutoTracker() {
       const targetAddress = e?.detail?.address;
       if (rideId && mode && targetAddress) {
         setNavTarget({ mode, address: targetAddress });
+        setTargetCoords(null);
+        lastFocusRef.current = null;
+        if (mode === 'destination') {
+          shouldFitRouteRef.current = true;
+          setHasActiveNavigation(true);
+          setSuppressActiveState(true);
+        }
         const ensureLocationAndFocus = async () => {
           let currentLat = lat;
           let currentLng = lng;
