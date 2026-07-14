@@ -117,15 +117,8 @@ export default function DriverLocationAutoTracker() {
         setStatus("Location saved.");
       } catch {}
 
-      // Trigger focus refresh less frequently
-      if (routeIdRef.current && navTarget?.address) {
-        const last = lastFocusRef.current;
-        const sameTarget = last && last.address === navTarget.address && last.mode === navTarget.mode;
-        if (!sameTarget || now - (last?.ts ?? 0) > 15000 || !targetCoords) {
-          void focusOnRide(routeIdRef.current, navTarget.mode, navTarget.address, nextLat, nextLng);
-          lastFocusRef.current = { address: navTarget.address, mode: navTarget.mode, ts: now };
-        }
-      }
+      // Keep updating the driver location without refocusing map on the target.
+      // The live marker already follows the driver, so repeated focus calls can cause unwanted destination jumps.
     }
   }
 
