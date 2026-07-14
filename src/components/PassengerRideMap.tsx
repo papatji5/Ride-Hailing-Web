@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { getSocket } from "@/lib/socket";
+import { onRideStatusChanged } from '@/lib/rideSocket';
 import type { Feature, LineString } from "geojson";
 
 const CAR_ICON_SVG = `
@@ -38,6 +39,7 @@ export default function PassengerRideMap({
   const dropoffMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [routeGeoJson, setRouteGeoJson] = useState<any>(null);
+  const [rideStatus, setRideStatus] = useState<string | null>(null);
 
   // Initialize map
   useEffect(() => {
@@ -117,11 +119,44 @@ export default function PassengerRideMap({
     };
 
     socket.on("driver-location", handleDriverLocation);
+    const offStatus = onRideStatusChanged((payload: any) => {
+      try {
+        if (!payload || String(payload?.rideId) !== String(rideId)) return;
+        setRideStatus(String(payload?.status ?? null));
+      } catch (e) {
+        // ignore
+      }
+    });
 
     return () => {
       socket.off("driver-location", handleDriverLocation);
+      offStatus();
     };
   }, [rideId]);
+
+  const haversineMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const toRad = (v: number) => (v * Math.PI) / 180;
+    const R = 6371000; // meters
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const formatMeters = (m: number) => {
+    if (m < 1000) return `${Math.round(m)} m`;
+    return `${(m / 1000).toFixed(2)} km`;
+  };
+
+  const estimateEtaMinutes = (meters: number, avgKmph = 35) => {
+    const speedMs = (avgKmph * 1000) / 3600;
+    const secs = meters / speedMs;
+    const mins = Math.max(1, Math.round(secs / 60));
+    return `${mins} min`;
+  };
 
   const fetchRoute = async (
     map: mapboxgl.Map,
@@ -218,7 +253,26 @@ export default function PassengerRideMap({
       />
       {driverLocation && (
         <div className="mt-2 text-xs text-slate-400">
-          Driver location: {driverLocation.lat.toFixed(4)}, {driverLocation.lng.toFixed(4)}
+          <div>Driver location: {driverLocation.lat.toFixed(4)}, {driverLocation.lng.toFixed(4)}</div>
+          <div className="mt-1 flex gap-3">
+            <div className="bg-slate-800/60 px-3 py-2 rounded-md">
+              <div className="text-xxs text-slate-300">To pickup</div>
+              <div className="text-sm font-medium text-white">
+                {formatMeters(haversineMeters(driverLocation.lat, driverLocation.lng, pickupLat, pickupLng))}
+                {' • '}
+                {estimateEtaMinutes(haversineMeters(driverLocation.lat, driverLocation.lng, pickupLat, pickupLng))}
+              </div>
+            </div>
+            <div className="bg-slate-800/60 px-3 py-2 rounded-md">
+              <div className="text-xxs text-slate-300">To destination</div>
+              <div className="text-sm font-medium text-white">
+                {formatMeters(haversineMeters(driverLocation.lat, driverLocation.lng, dropoffLat || pickupLat, dropoffLng || pickupLng))}
+                {' • '}
+                {estimateEtaMinutes(haversineMeters(driverLocation.lat, driverLocation.lng, dropoffLat || pickupLat, dropoffLng || pickupLng))}
+              </div>
+            </div>
+          </div>
+          {rideStatus ? <div className="mt-1 text-xxs text-slate-400">Status: {rideStatus}</div> : null}
         </div>
       )}
     </div>
