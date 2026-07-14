@@ -375,7 +375,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
     const socket = getSocket();
 
     const handleDriverLocation = (data: any) => {
-      if (data.rideId === rideId && typeof data.lat === "number" && typeof data.lng === "number") {
+      if (String(data.rideId) === String(rideId) && typeof data.lat === "number" && typeof data.lng === "number") {
         setDriverLocation({ lat: data.lat, lng: data.lng });
 
         const map = mapRef.current;
@@ -388,6 +388,15 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
           carMarker.current = new mapboxgl.Marker(carEl)
             .setLngLat([data.lng, data.lat])
             .addTo(map);
+          // If car marker is outside current viewport, pan the map a little so it's visible (one-time)
+          try {
+            const bounds = map.getBounds();
+            if (!bounds.contains([data.lng, data.lat])) {
+              map.easeTo({ center: [data.lng, data.lat], duration: 700 });
+            }
+          } catch (e) {
+            // ignore
+          }
         }
       }
     };

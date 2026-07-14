@@ -99,7 +99,7 @@ export default function PassengerRideMap({
     const socket = getSocket();
 
     const handleDriverLocation = (data: any) => {
-      if (data.rideId === rideId && data.lat && data.lng) {
+      if (String(data.rideId) === String(rideId) && data.lat && data.lng) {
         setDriverLocation({ lat: data.lat, lng: data.lng });
 
         // Update car marker position with smooth animation
