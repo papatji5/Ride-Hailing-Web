@@ -153,7 +153,7 @@ export default function DriverLocationAutoTracker() {
         lastCenterRef.current = { lat: nextLat, lng: nextLng };
       }
 
-      // Re-center only when driver has moved significantly to avoid jitter on mobile
+      // Re-center only when driver has moved significantly to avoid jitter on mobile.
       const last = lastCenterRef.current;
       function metersBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
         const R = 6371000; // m
@@ -168,13 +168,13 @@ export default function DriverLocationAutoTracker() {
         return R * c;
       }
 
-      const isDestinationRoute = navTarget?.mode === 'destination' && !!targetCoords;
       if (!last || metersBetween(last, { lat: nextLat, lng: nextLng }) > 30) {
-        if (!shouldFitRouteRef.current && !isDestinationRoute) {
+        if (!shouldFitRouteRef.current) {
           map.easeTo({ center: [nextLng, nextLat], duration: 1000 });
           lastCenterRef.current = { lat: nextLat, lng: nextLng };
         }
       }
+
       if (targetCoords) {
         void drawRoute({ lat: nextLat, lng: nextLng }, targetCoords);
       }
@@ -431,10 +431,7 @@ export default function DriverLocationAutoTracker() {
     });
 
     if (shouldFitRouteRef.current) {
-      const bounds = coords.reduce((acc, coord) => {
-        return acc.extend(coord as [number, number]);
-      }, new mapboxgl.LngLatBounds(coords[0] as [number, number], coords[0] as [number, number]));
-      map.fitBounds(bounds, { padding: 80, duration: 1000, maxZoom: 15 });
+      map.easeTo({ center: [from.lng, from.lat], zoom: 15, duration: 1000 });
     }
 
     setRouteInfo({
@@ -508,10 +505,13 @@ export default function DriverLocationAutoTracker() {
       if (driverLat != null && driverLng != null) {
         renderLocation(driverLat, driverLng);
         shouldFitRouteRef.current = true;
-        await drawRoute({ lat: driverLat, lng: driverLng }, target);
-        shouldFitRouteRef.current = false;
+        try {
+          await drawRoute({ lat: driverLat, lng: driverLng }, target);
+        } finally {
+          shouldFitRouteRef.current = false;
+        }
       } else {
-        map.easeTo({ center: [target.lng, target.lat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
+        map.easeTo({ center: [target.lng, target.lat], zoom: 15, duration: 1000 });
       }
       setHasActiveNavigation(true);
 
