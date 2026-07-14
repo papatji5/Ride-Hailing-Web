@@ -721,10 +721,18 @@ export default function DriverLocationAutoTracker() {
             )}
           </div>
           <div className="flex items-center gap-3">
-            <button type="button" onClick={recenterToDriver} className="btn btn-secondary">
+            <button
+              type="button"
+              onClick={recenterToDriver}
+              className="btn btn-secondary px-4 py-1 text-sm rounded-full h-9 shadow-sm border-gray-700 hover:translate-y-0.5 transition-transform"
+            >
               Recenter to driver
             </button>
-            <button type="button" className="btn btn-primary" disabled>
+            <button
+              type="button"
+              className="btn btn-primary px-5 py-1 text-sm rounded-full h-9 shadow-md disabled:opacity-80 disabled:cursor-not-allowed"
+              disabled
+            >
               Automatic GPS tracking enabled
             </button>
           </div>
