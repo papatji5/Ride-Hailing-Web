@@ -559,7 +559,8 @@ export default function DriverLocationAutoTracker() {
       const mode = e?.detail?.mode;
       const targetAddress = e?.detail?.address;
       if (rideId && mode && targetAddress) {
-        if (routeIdRef.current === rideId && navTarget?.mode === mode && navTarget.address === targetAddress && targetCoords) {
+        const currentNav = navTarget;
+        if (routeIdRef.current === rideId && currentNav && currentNav.mode === mode && currentNav.address === targetAddress && targetCoords) {
           return;
         }
         setNavTarget({ mode, address: targetAddress });
