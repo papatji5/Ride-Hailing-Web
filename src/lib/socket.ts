@@ -13,6 +13,19 @@ let adapter: LocalSocket | null = null;
 export function getSocket(): LocalSocket {
   if (adapter) return adapter;
 
+  // If we're on the server (SSR / edge), return a no-op adapter so imports
+  // don't attempt to create browser Supabase clients or open realtime channels.
+  if (typeof window === "undefined") {
+    const noop: LocalSocket = {
+      id: undefined,
+      on: () => undefined,
+      off: () => undefined,
+      emit: async () => {},
+    };
+    adapter = noop;
+    return adapter;
+  }
+
   // Lightweight in-memory event emitter that forwards to/from a Supabase Realtime channel.
   const supabase: SupabaseClient = (createSupabaseBrowserClient() as unknown) as SupabaseClient;
   // channel name shared by all clients; individual messages include `rideId` to scope recipients
