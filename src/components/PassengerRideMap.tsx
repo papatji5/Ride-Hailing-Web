@@ -40,6 +40,9 @@ export default function PassengerRideMap({
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [routeGeoJson, setRouteGeoJson] = useState<any>(null);
   const [rideStatus, setRideStatus] = useState<string | null>(null);
+  const [pickupRouteInfo, setPickupRouteInfo] = useState<{ distance?: number; duration?: number } | null>(null);
+  const [destRouteInfo, setDestRouteInfo] = useState<{ distance?: number; duration?: number } | null>(null);
+  const lastRouteFetchRef = useRef<{ ts: number; lat?: number; lng?: number }>({ ts: 0 });
 
   // Initialize map
   useEffect(() => {
@@ -115,6 +118,37 @@ export default function PassengerRideMap({
             duration: 1000,
           });
         }
+
+        // Throttle route ETA requests: only when moved >25m or after 4s
+        try {
+          const now = Date.now();
+          const last = lastRouteFetchRef.current;
+          const moved = last.lat != null && last.lng != null ? haversineMeters(last.lat, last.lng, data.lat, data.lng) : Infinity;
+          if (now - last.ts > 3000 || moved > 25) {
+            lastRouteFetchRef.current = { ts: now, lat: data.lat, lng: data.lng };
+            // fetch driver->pickup
+            void (async () => {
+              try {
+                const pRes = await fetch(`/api/directions?pickup=${data.lng},${data.lat}&dropoff=${pickupLng},${pickupLat}`);
+                if (pRes.ok) {
+                  const pJson = await pRes.json();
+                  setPickupRouteInfo({ distance: pJson.distance, duration: pJson.duration });
+                }
+              } catch (e) {}
+            })();
+
+            // fetch driver->destination
+            void (async () => {
+              try {
+                const dRes = await fetch(`/api/directions?pickup=${data.lng},${data.lat}&dropoff=${dropoffLng || pickupLng},${dropoffLat || pickupLat}`);
+                if (dRes.ok) {
+                  const dJson = await dRes.json();
+                  setDestRouteInfo({ distance: dJson.distance, duration: dJson.duration });
+                }
+              } catch (e) {}
+            })();
+          }
+        } catch (e) {}
       }
     };
 
@@ -149,6 +183,12 @@ export default function PassengerRideMap({
   const formatMeters = (m: number) => {
     if (m < 1000) return `${Math.round(m)} m`;
     return `${(m / 1000).toFixed(2)} km`;
+  };
+
+  const formatDuration = (seconds: number | undefined | null) => {
+    if (seconds == null) return "N/A";
+    const mins = Math.max(1, Math.round(seconds / 60));
+    return `${mins} min`;
   };
 
   const estimateEtaMinutes = (meters: number, avgKmph = 35) => {
@@ -258,17 +298,17 @@ export default function PassengerRideMap({
             <div className="bg-slate-800/60 px-3 py-2 rounded-md">
               <div className="text-xxs text-slate-300">To pickup</div>
               <div className="text-sm font-medium text-white">
-                {formatMeters(haversineMeters(driverLocation.lat, driverLocation.lng, pickupLat, pickupLng))}
+                {pickupRouteInfo?.distance ? formatMeters(pickupRouteInfo.distance) : formatMeters(haversineMeters(driverLocation.lat, driverLocation.lng, pickupLat, pickupLng))}
                 {' • '}
-                {estimateEtaMinutes(haversineMeters(driverLocation.lat, driverLocation.lng, pickupLat, pickupLng))}
+                {pickupRouteInfo?.duration ? formatDuration(pickupRouteInfo.duration) : estimateEtaMinutes(haversineMeters(driverLocation.lat, driverLocation.lng, pickupLat, pickupLng))}
               </div>
             </div>
             <div className="bg-slate-800/60 px-3 py-2 rounded-md">
               <div className="text-xxs text-slate-300">To destination</div>
               <div className="text-sm font-medium text-white">
-                {formatMeters(haversineMeters(driverLocation.lat, driverLocation.lng, dropoffLat || pickupLat, dropoffLng || pickupLng))}
+                {destRouteInfo?.distance ? formatMeters(destRouteInfo.distance) : formatMeters(haversineMeters(driverLocation.lat, driverLocation.lng, dropoffLat || pickupLat, dropoffLng || pickupLng))}
                 {' • '}
-                {estimateEtaMinutes(haversineMeters(driverLocation.lat, driverLocation.lng, dropoffLat || pickupLat, dropoffLng || pickupLng))}
+                {destRouteInfo?.duration ? formatDuration(destRouteInfo.duration) : estimateEtaMinutes(haversineMeters(driverLocation.lat, driverLocation.lng, dropoffLat || pickupLat, dropoffLng || pickupLng))}
               </div>
             </div>
           </div>
