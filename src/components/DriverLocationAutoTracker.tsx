@@ -170,7 +170,7 @@ export default function DriverLocationAutoTracker() {
       }
 
       const currentBounds = map.getBounds();
-      const isDriverInView = currentBounds.contains([nextLng, nextLat]);
+      const isDriverInView = currentBounds?.contains([nextLng, nextLat]) ?? false;
       if (!isDriverInView && !shouldFitRouteRef.current) {
         map.easeTo({ center: [nextLng, nextLat], duration: 1000 });
         lastCenterRef.current = { lat: nextLat, lng: nextLng };
