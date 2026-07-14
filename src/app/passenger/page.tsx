@@ -21,51 +21,6 @@ function parseOptionalNumber(value: FormDataEntryValue | null) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-async function requestRideAction(formData: FormData) {
-  "use server";
-
-  const pickupAddress = String(formData.get("pickup_address") ?? "").trim();
-  const dropoffAddress = String(formData.get("dropoff_address") ?? "").trim();
-
-  if (!pickupAddress || !dropoffAddress) {
-    redirect("/passenger?error=" + encodeURIComponent("Select a pickup and dropoff on the map before requesting a ride."));
-  }
-
-  const user = await requireRole("PASSENGER");
-  const supabase = await createClient();
-
-  const paymentMethod = String(formData.get("payment_method") ?? "CASH").toUpperCase();
-  const paymentStatus = paymentMethod === "CARD" ? "PENDING" : "UNPAID";
-  const scheduledAt = String(formData.get("scheduled_at") ?? "").trim();
-
-  const scheduledAtValue = scheduledAt ? new Date(scheduledAt).toISOString() : null;
-
-  if (scheduledAt && isNaN(Date.parse(scheduledAt))) {
-    redirect("/passenger?error=" + encodeURIComponent("Scheduled pickup time is invalid."));
-  }
-
-  const { error } = await supabase.from("rides").insert({
-    passenger_id: user.id,
-    status: "REQUESTED",
-    pickup_address: pickupAddress,
-    dropoff_address: dropoffAddress,
-    pickup_location: null,
-    dropoff_location: null,
-    scheduled_at: scheduledAtValue,
-    estimated_distance_km: parseOptionalNumber(formData.get("estimated_distance_km")),
-    estimated_duration_min: parseOptionalNumber(formData.get("estimated_duration_min")),
-    estimated_fare_cents: parseOptionalNumber(formData.get("estimated_fare_cents")),
-    payment_method: paymentMethod === "CARD" ? "CARD" : "CASH",
-    payment_status: paymentStatus,
-  });
-
-  if (error) {
-    redirect("/passenger?error=" + encodeURIComponent(error.message));
-  }
-
-  redirect("/passenger?msg=" + encodeURIComponent("Ride requested."));
-}
-
 export default async function PassengerPage(props: PassengerPageProps) {
   const sp = (props.searchParams ? await props.searchParams : {}) as {
     msg?: string;
@@ -155,14 +110,12 @@ export default async function PassengerPage(props: PassengerPageProps) {
         </div>
       ) : null}
 
-      {!activeRide ? <PassengerRidePlanner requestRideAction={requestRideAction} /> : null}
+      {!activeRide ? <PassengerRidePlanner /> : null}
 
-      {/* Client-side socket listeners and active ride display */}
+      <PassengerRideSockets rideIds={rides?.map((r: any) => String(r.id)) ?? []} />
+
       {activeRide ? (
-        <>
-          <PassengerActiveRide rides={rides ?? []} driver={activeDriver} vehicle={activeVehicle} />
-          <PassengerRideSockets rideIds={[activeRide.id]} />
-        </>
+        <PassengerActiveRide rides={rides ?? []} driver={activeDriver} vehicle={activeVehicle} />
       ) : null}
 
       <div className="card stack">

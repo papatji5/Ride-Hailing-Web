@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import MapboxPlaceSearch from "./MapboxPlaceSearch";
+import PassengerRideSockets from "./PassengerRideSockets";
 
 type Suggestion = { id: string; place_name: string; center: [number, number] };
 type RouteFeature = GeoJSON.Feature<GeoJSON.LineString>;
@@ -33,10 +35,6 @@ const featuredDriver: FeaturedDriver = {
   notes: "Available for Johannesburg and Pretoria trips during the MVP pilot.",
 };
 
-type RidePlannerProps = {
-  requestRideAction: (formData: FormData) => void | Promise<void>;
-};
-
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
   const toRad = (v: number) => (v * Math.PI) / 180;
   const radiusMeters = 6371e3;
@@ -52,7 +50,8 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return radiusMeters * c;
 }
 
-export default function PassengerRidePlanner({ requestRideAction }: RidePlannerProps) {
+export default function PassengerRidePlanner() {
+  const router = useRouter();
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const mapFormEl = useRef<HTMLDivElement | null>(null);
@@ -77,6 +76,8 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
   const [scheduledAt, setScheduledAt] = useState<string>("");
   const [scheduledError, setScheduledError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [pendingRideId, setPendingRideId] = useState<string | null>(null);
+  const [waitingForDriver, setWaitingForDriver] = useState(false);
 
   const [straightDistance, setStraightDistance] = useState<number | null>(null);
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
@@ -380,12 +381,47 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
     }
 
     if (paymentMethod === "CASH") {
-      // Direct cash payment: submit form immediately
-      const formData = new FormData(e.currentTarget);
+      // Direct cash payment: submit ride request through the API and wait for a driver to accept.
+      setPaymentError(null);
       try {
-        await requestRideAction(formData);
-        setStatusMessage("Ride requested successfully. A driver will be assigned shortly.");
+        const createRideRes = await fetch("/api/rides/create-pending", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            pickup_address: pickupAddressValue,
+            dropoff_address: dropoffAddressValue,
+            scheduled_at: scheduledAt || null,
+            estimated_distance_km: effectiveDistance ? effectiveDistance / 1000 : null,
+            estimated_duration_min: effectiveDuration ? effectiveDuration / 60 : null,
+            estimated_fare_cents: fareEstimate ? Math.round(fareEstimate.fare * 100) : null,
+            payment_method: "CASH",
+          }),
+        });
+
+        const rideData = await parseResponse(createRideRes);
+        if (!createRideRes.ok || !rideData?.rideId) {
+          setWaitingForDriver(false);
+          setPaymentError(rideData?.error || rideData?.message || "Failed to request ride.");
+          return;
+        }
+
+        setPendingRideId(String(rideData.rideId));
+        setWaitingForDriver(true);
+        setStatusMessage("Ride requested successfully. Waiting for a driver to accept your request.");
+        setPickup(null);
+        setDropoff(null);
+        setPickupAddress(null);
+        setDropoffAddress(null);
+        setQuery("");
+        setSuggestions([]);
+        setRouteDistance(null);
+        setRouteDuration(null);
+        setRouteError(null);
+        setRouteFeature(null);
+        setPaymentMethod("CASH");
       } catch (err) {
+        setWaitingForDriver(false);
         setPaymentError(err instanceof Error ? err.message : String(err));
       }
       return;
@@ -761,9 +797,9 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
           <button
             type="submit"
             className="rounded-full bg-gradient-to-r from-blue-600 to-cyan-400 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!canRequestRide || paymentProcessing}
+            disabled={!canRequestRide || paymentProcessing || waitingForDriver}
           >
-            {paymentProcessing ? "Redirecting to payment..." : "Request ride"}
+            {paymentProcessing ? "Redirecting to payment..." : waitingForDriver ? "Waiting for driver..." : "Request ride"}
           </button>
           <button
             type="button"
@@ -788,11 +824,12 @@ export default function PassengerRidePlanner({ requestRideAction }: RidePlannerP
           </div>
         ) : null}
         {statusMessage ? (
-          <div className="mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-900">
+          <div className={`mt-3 rounded-lg px-3 py-2 text-sm ${waitingForDriver ? "border border-cyan-400/20 bg-cyan-400/10 text-cyan-900" : "border border-emerald-400/20 bg-emerald-400/10 text-emerald-900"}`}>
             {statusMessage}
           </div>
         ) : null}
       </form>
+      {pendingRideId ? <PassengerRideSockets rideIds={[pendingRideId]} /> : null}
 
 
     </section>

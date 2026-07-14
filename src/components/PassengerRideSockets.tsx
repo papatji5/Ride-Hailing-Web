@@ -1,9 +1,18 @@
 "use client";
 
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { joinRide, leaveRide, onMessage, onRideStatusChanged } from '@/lib/rideSocket';
 
-export default function PassengerRideSockets({ rideIds }: { rideIds: string[] }) {
+export default function PassengerRideSockets({
+  rideIds,
+  onAccepted,
+}: {
+  rideIds: string[];
+  onAccepted?: (rideId: string) => void;
+}) {
+  const router = useRouter();
+
   useEffect(() => {
     if (!rideIds || rideIds.length === 0) return;
 
@@ -23,6 +32,11 @@ export default function PassengerRideSockets({ rideIds }: { rideIds: string[] })
       if (payload.status === 'ACCEPTED') {
         if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           new Notification('Ride accepted', { body: 'Your driver has accepted the ride request.' });
+        }
+        if (onAccepted) {
+          onAccepted(String(payload.rideId));
+        } else {
+          router.refresh();
         }
       }
       if (payload.status === 'DECLINED') {
