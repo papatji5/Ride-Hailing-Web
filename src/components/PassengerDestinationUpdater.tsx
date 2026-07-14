@@ -71,47 +71,37 @@ function formatMinutes(value?: number | null) {
 }
 
 async function geocodeAddress(address: string): Promise<Point | null> {
-  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-  if (!token || !address.trim()) return null;
+  if (!address.trim()) return null;
 
-  const queries = [
-    `${encodeURIComponent(address)}`,
-    `${encodeURIComponent(address.replace(/\s*,\s*/g, ", ").replace(/,\s*South Africa$/i, ""))}`,
-  ];
+  const candidates = [
+    address,
+    address.replace(/\s*,\s*South Africa$/i, ""),
+    address.replace(/,\s*Gauteng.*$/i, ""),
+  ].filter(Boolean);
 
-  const params = [
-    `access_token=${token}&limit=1&country=za&autocomplete=false&types=address,place,locality,neighborhood,poi`,
-    `access_token=${token}&limit=1&autocomplete=false&types=address,place,locality,neighborhood,poi`,
-  ];
-
-  try {
-    for (const query of queries) {
-      for (const param of params) {
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?${param}`;
-        const res = await fetch(url);
-        if (!res.ok) continue;
-        const data = await res.json();
-        const feature = data?.features?.[0];
-        if (feature?.center?.length === 2) {
-          return { lng: feature.center[0], lat: feature.center[1] };
-        }
+  for (const query of candidates) {
+    try {
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const center = data?.center;
+      if (center && center.length === 2) {
+        return { lng: center[0], lat: center[1] };
       }
+    } catch {
+      // ignore
     }
-
-    return null;
-  } catch {
-    return null;
   }
+
+  return null;
 }
 
 async function reverseGeocodePoint(point: Point): Promise<string | null> {
-  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-  if (!token) return null;
   try {
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${point.lng},${point.lat}.json?access_token=${token}&limit=1&country=za`;
-    const res = await fetch(url);
+    const res = await fetch(`/api/reverse-geocode?lat=${point.lat}&lng=${point.lng}`);
+    if (!res.ok) return null;
     const data = await res.json();
-    return data?.features?.[0]?.place_name ?? null;
+    return data?.place_name ?? null;
   } catch {
     return null;
   }
@@ -382,10 +372,11 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
 
     suggestTimer.current = window.setTimeout(async () => {
       try {
-        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-        if (!token) return;
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=5&country=za`;
-        const res = await fetch(url);
+        const res = await fetch(`/api/places/search?q=${encodeURIComponent(query)}`);
+        if (!res.ok) {
+          setSuggestions([]);
+          return;
+        }
         const data = await res.json();
         setSuggestions(data?.features ?? []);
       } catch {

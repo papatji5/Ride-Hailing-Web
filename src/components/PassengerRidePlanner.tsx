@@ -171,14 +171,11 @@ export default function PassengerRidePlanner() {
 
 
   async function reverseGeocode(lng: number, lat: number) {
-    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-    if (!token) return null;
-
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&limit=1`;
     try {
-      const res = await fetch(url);
+      const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+      if (!res.ok) return null;
       const data = await res.json();
-      return data.features?.[0]?.place_name ?? null;
+      return data?.place_name ?? null;
     } catch {
       return null;
     }
@@ -324,12 +321,11 @@ export default function PassengerRidePlanner() {
     setLoadingSuggestions(true);
     suggestTimer.current = window.setTimeout(async () => {
       try {
-        const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&autocomplete=true&limit=6&country=za`;
-        const res = await fetch(url);
-        const data = await res.json();
-        const items: Suggestion[] = (data.features || []).map((feature: any) => ({
-          id: feature.id,
+          const res = await fetch(`/api/places/search?q=${encodeURIComponent(query)}`);
+          if (!res.ok) {
+            setSuggestions([]);
+            return;
+          }
           place_name: feature.place_name,
           center: feature.center,
         }));

@@ -88,11 +88,13 @@ export default function DriverAvailableRequests() {
       if (!r.pickup_address) continue;
 
       try {
-        const geoRes = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(r.pickup_address)}.json?access_token=${token}&limit=1&country=za`,
-        );
+        const geoRes = await fetch(`/api/geocode?q=${encodeURIComponent(r.pickup_address ?? "")}`);
+        if (!geoRes.ok) {
+          newDistances[r.id] = null;
+          continue;
+        }
         const geo = await geoRes.json().catch(() => null);
-        const coords = geo?.features?.[0]?.center;
+        const coords = geo?.center;
         if (coords && coords.length === 2) {
           const [lng, lat] = coords;
           newDistances[r.id] = haversineDistanceKm(pos.lat, pos.lng, lat, lng);
