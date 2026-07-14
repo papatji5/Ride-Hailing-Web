@@ -99,7 +99,9 @@ export default function PassengerRideMap({
     const socket = getSocket();
 
     const handleDriverLocation = (data: any) => {
+      console.debug("PassengerRideMap driver-location", { data, rideId });
       if (String(data.rideId) === String(rideId) && data.lat && data.lng) {
+        console.debug("PassengerRideMap applying driver location", { lat: data.lat, lng: data.lng });
         setDriverLocation({ lat: data.lat, lng: data.lng });
 
         // Update car marker position with smooth animation

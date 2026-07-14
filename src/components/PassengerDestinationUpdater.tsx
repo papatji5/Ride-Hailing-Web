@@ -375,6 +375,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
     const socket = getSocket();
 
     const handleDriverLocation = (data: any) => {
+      console.debug("PassengerDestinationUpdater driver-location", { data, rideId });
       if (String(data.rideId) === String(rideId) && typeof data.lat === "number" && typeof data.lng === "number") {
         setDriverLocation({ lat: data.lat, lng: data.lng });
 
@@ -382,8 +383,10 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
         if (!map) return;
 
         if (carMarker.current) {
+          console.debug("Updating existing car marker", { lng: data.lng, lat: data.lat });
           carMarker.current.setLngLat([data.lng, data.lat]);
         } else {
+          console.debug("Creating car marker on passenger map", { lng: data.lng, lat: data.lat });
           const carEl = createCarMarker();
           carMarker.current = new mapboxgl.Marker(carEl)
             .setLngLat([data.lng, data.lat])
