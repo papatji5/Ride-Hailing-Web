@@ -72,19 +72,29 @@ function formatMinutes(value?: number | null) {
 
 async function geocodeAddress(address: string): Promise<Point | null> {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-  if (!token) return null;
-  try {
-    const searchUrls = [
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${token}&limit=1&country=za`,
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${token}&limit=1`,
-    ];
+  if (!token || !address.trim()) return null;
 
-    for (const url of searchUrls) {
-      const res = await fetch(url);
-      const data = await res.json();
-      const feature = data?.features?.[0];
-      if (feature?.center?.length === 2) {
-        return { lng: feature.center[0], lat: feature.center[1] };
+  const queries = [
+    `${encodeURIComponent(address)}`,
+    `${encodeURIComponent(address.replace(/\s*,\s*/g, ", ").replace(/,\s*South Africa$/i, ""))}`,
+  ];
+
+  const params = [
+    `access_token=${token}&limit=1&country=za&autocomplete=false&types=address,place,locality,neighborhood,poi`,
+    `access_token=${token}&limit=1&autocomplete=false&types=address,place,locality,neighborhood,poi`,
+  ];
+
+  try {
+    for (const query of queries) {
+      for (const param of params) {
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?${param}`;
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const feature = data?.features?.[0];
+        if (feature?.center?.length === 2) {
+          return { lng: feature.center[0], lat: feature.center[1] };
+        }
       }
     }
 
@@ -229,6 +239,16 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
       const point = await geocodeAddress(address);
       if (canceled) return;
       if (!point) {
+        // If geocoding the full address fails, try a shorter trimmed version.
+        const trimmed = address.replace(/,?\s*South Africa$/i, "").trim();
+        if (trimmed && trimmed !== address) {
+          const fallback = await geocodeAddress(trimmed);
+          if (!canceled && fallback) {
+            setDropoffPoint(fallback);
+            return;
+          }
+        }
+
         setMapError("Unable to locate current destination on the map.");
         return;
       }
