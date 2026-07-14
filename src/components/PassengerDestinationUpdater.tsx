@@ -391,7 +391,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
           // If car marker is outside current viewport, pan the map a little so it's visible (one-time)
           try {
             const bounds = map.getBounds();
-            if (!bounds.contains([data.lng, data.lat])) {
+            if (bounds && !bounds.contains([data.lng, data.lat])) {
               map.easeTo({ center: [data.lng, data.lat], duration: 700 });
             }
           } catch (e) {
