@@ -368,14 +368,36 @@ export default function DriverLocationAutoTracker() {
 
   async function geocodeAddress(address: string) {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-    const geoRes = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${token}&limit=1&country=za`,
-    );
-    const geo = await geoRes.json().catch(() => null);
-    const coords = geo?.features?.[0]?.center;
-    if (coords && coords.length === 2) {
-      return { lng: coords[0] as number, lat: coords[1] as number };
+    if (!token || !address.trim()) return null;
+
+    const queries = [
+      `${encodeURIComponent(address)}`,
+      `${encodeURIComponent(address.replace(/\s*,\s*South Africa$/i, ""))}`,
+    ];
+
+    const params = [
+      `access_token=${token}&limit=1&country=za&autocomplete=false&types=address,place,locality,neighborhood,poi`,
+      `access_token=${token}&limit=1&autocomplete=false&types=address,place,locality,neighborhood,poi`,
+    ];
+
+    for (const query of queries) {
+      for (const param of params) {
+        try {
+          const geoRes = await fetch(
+            `https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?${param}`,
+          );
+          if (!geoRes.ok) continue;
+          const geo = await geoRes.json().catch(() => null);
+          const coords = geo?.features?.[0]?.center;
+          if (coords && coords.length === 2) {
+            return { lng: coords[0] as number, lat: coords[1] as number };
+          }
+        } catch {
+          // ignore and continue to next fallback
+        }
+      }
     }
+
     return null;
   }
 
@@ -392,13 +414,16 @@ export default function DriverLocationAutoTracker() {
       }
     }
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
-    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=polyline6&access_token=${token}`;
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson&access_token=${token}`;
     const res = await fetch(url);
     const json = await res.json().catch(() => null);
     const route = json?.routes?.[0];
-    if (!route?.geometry) return;
+    if (!route?.geometry?.coordinates || !Array.isArray(route.geometry.coordinates)) {
+      console.error("Driver route missing geometry", json);
+      return;
+    }
 
-    const coords = decodePolyline(route.geometry);
+    const coords = route.geometry.coordinates as [number, number][];
     const map = mapRef.current;
     if (!map) return;
 

@@ -213,7 +213,7 @@ export default function PassengerRideMap({
       );
       const data = await response.json();
 
-      if (data.coordinates) {
+      if (data.coordinates && Array.isArray(data.coordinates) && data.coordinates.length > 0) {
         const geoJson: Feature<LineString> = {
           type: "Feature",
           properties: {},

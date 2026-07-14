@@ -239,12 +239,20 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
       const point = await geocodeAddress(address);
       if (canceled) return;
       if (!point) {
-        // If geocoding the full address fails, try a shorter trimmed version.
         const trimmed = address.replace(/,?\s*South Africa$/i, "").trim();
         if (trimmed && trimmed !== address) {
           const fallback = await geocodeAddress(trimmed);
           if (!canceled && fallback) {
             setDropoffPoint(fallback);
+            return;
+          }
+        }
+
+        const short = address.replace(/,\s*Gauteng.*$/i, "").trim();
+        if (short && short !== address) {
+          const fallback2 = await geocodeAddress(short);
+          if (!canceled && fallback2) {
+            setDropoffPoint(fallback2);
             return;
           }
         }

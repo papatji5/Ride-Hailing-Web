@@ -3,8 +3,8 @@
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
-    const pickup = url.searchParams.get("pickup");
-    const dropoff = url.searchParams.get("dropoff");
+    const pickup = url.searchParams.get("pickup") ?? url.searchParams.get("start");
+    const dropoff = url.searchParams.get("dropoff") ?? url.searchParams.get("end");
     if (!pickup || !dropoff) {
       return NextResponse.json({ error: "missing params" }, { status: 400 });
     }
@@ -35,6 +35,7 @@ export async function GET(req: Request) {
       distance: route.distance,
       duration: route.duration,
       geometry: route.geometry,
+      coordinates: route.geometry?.coordinates ?? [],
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
