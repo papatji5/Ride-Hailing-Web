@@ -146,33 +146,34 @@ export default function DriverLocationAutoTracker() {
       if (markerRef.current) {
         markerRef.current.setLngLat([nextLng, nextLat]);
       } else {
-        markerRef.current = new mapboxgl.Marker({ color: "#22c55e" }).setLngLat([nextLng, nextLat]).addTo(map);
+        const carEl = document.createElement("div");
+        carEl.style.display = "flex";
+        carEl.style.alignItems = "center";
+        carEl.style.justifyContent = "center";
+        carEl.style.width = "34px";
+        carEl.style.height = "34px";
+        carEl.style.backgroundColor = "#22c55e";
+        carEl.style.border = "2px solid rgba(255,255,255,0.9)";
+        carEl.style.boxShadow = "0 0 12px rgba(34,197,94,0.35)";
+        carEl.style.borderRadius = "50%";
+        carEl.style.fontSize = "18px";
+        carEl.style.color = "#ffffff";
+        carEl.textContent = "🚗";
+
+        markerRef.current = new mapboxgl.Marker({ element: carEl, anchor: "center" })
+          .setLngLat([nextLng, nextLat])
+          .addTo(map);
         // Only set initial view on first marker placement
         map.easeTo({ center: [nextLng, nextLat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
         initialMarkerPlacedRef.current = true;
         lastCenterRef.current = { lat: nextLat, lng: nextLng };
       }
 
-      // Re-center only when driver has moved significantly to avoid jitter on mobile.
-      const last = lastCenterRef.current;
-      function metersBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-        const R = 6371000; // m
-        const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-        const dLon = ((b.lng - a.lng) * Math.PI) / 180;
-        const lat1 = (a.lat * Math.PI) / 180;
-        const lat2 = (b.lat * Math.PI) / 180;
-        const sinDLat = Math.sin(dLat / 2);
-        const sinDLon = Math.sin(dLon / 2);
-        const aa = sinDLat * sinDLat + sinDLon * sinDLon * Math.cos(lat1) * Math.cos(lat2);
-        const c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
-        return R * c;
-      }
-
-      if (!last || metersBetween(last, { lat: nextLat, lng: nextLng }) > 30) {
-        if (!shouldFitRouteRef.current) {
-          map.easeTo({ center: [nextLng, nextLat], duration: 1000 });
-          lastCenterRef.current = { lat: nextLat, lng: nextLng };
-        }
+      const currentBounds = map.getBounds();
+      const isDriverInView = currentBounds.contains([nextLng, nextLat]);
+      if (!isDriverInView && !shouldFitRouteRef.current) {
+        map.easeTo({ center: [nextLng, nextLat], duration: 1000 });
+        lastCenterRef.current = { lat: nextLat, lng: nextLng };
       }
 
       if (targetCoords) {
