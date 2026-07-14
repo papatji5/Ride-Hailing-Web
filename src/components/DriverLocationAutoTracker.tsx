@@ -462,10 +462,11 @@ export default function DriverLocationAutoTracker() {
     if (!rideId) return;
     const targetKey = `${type}:${address ?? ''}`;
     const last = lastFocusRef.current;
-    if (last?.address === address && last.mode === type) {
+    if (last && last.address === address && last.mode === type) {
       return;
     }
-    if (pendingFocusRef.current?.address === address && pendingFocusRef.current.mode === type) {
+    const pending = pendingFocusRef.current;
+    if (pending && pending.address === address && pending.mode === type) {
       return;
     }
 
@@ -538,7 +539,8 @@ export default function DriverLocationAutoTracker() {
       // eslint-disable-next-line no-console
       console.error("Error focusing on ride target", err);
     } finally {
-      if (pendingFocusRef.current?.address === address && pendingFocusRef.current.mode === type) {
+      const pendingClear = pendingFocusRef.current;
+      if (pendingClear && pendingClear.address === address && pendingClear.mode === type) {
         pendingFocusRef.current = null;
       }
     }
