@@ -50,13 +50,14 @@ export default function DriverLocationAutoTracker() {
   const targetMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const routeIdRef = useRef<string | null>(null);
   const watchIdRef = useRef<number | null>(null);
-  const lastCenterRef = useRef<{ lat: number; lng: number } | null>(null);
+  const lastCenterRef = useRef<{ lat: number; lng: number; ts: number } | null>(null);
   const initialMarkerPlacedRef = useRef(false);
   const routeSourceId = "driver-nav-route";
   const lastSentRef = useRef<string>("");
   const lastPushTimeRef = useRef<number>(0);
   const lastUiUpdateRef = useRef<number>(0);
   const lastFocusRef = useRef<{ address: string | null; mode: "pickup" | "destination" | null; ts: number } | null>(null);
+  const pendingFocusRef = useRef<{ address: string; mode: "pickup" | "destination" } | null>(null);
   const shouldFitRouteRef = useRef(false);
   const UI_UPDATE_INTERVAL_ACTIVE = 60_000; // when driving, update UI at most once per minute
   const UI_UPDATE_INTERVAL_IDLE = 2_000; // when idle, update UI at most once per 2s
@@ -70,6 +71,8 @@ export default function DriverLocationAutoTracker() {
   const [error, setError] = useState<string | null>(null);
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
+  const latRef = useRef<number | null>(null);
+  const lngRef = useRef<number | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [routeInfo, setRouteInfo] = useState<{ distanceKm: number; durationMin: number } | null>(null);
   const lastRouteFromRef = useRef<{ lat: number; lng: number; ts: number } | null>(null);
@@ -134,6 +137,8 @@ export default function DriverLocationAutoTracker() {
         lastUiUpdateRef.current = now;
       } catch {}
     }
+    latRef.current = nextLat;
+    lngRef.current = nextLng;
     const map = mapRef.current;
     if (map) {
       if (markerRef.current) {
@@ -164,9 +169,12 @@ export default function DriverLocationAutoTracker() {
 
       const currentBounds = map.getBounds();
       const isDriverInView = currentBounds?.contains([nextLng, nextLat]) ?? false;
-      if (!isDriverInView && !shouldFitRouteRef.current) {
+      const lastCenter = lastCenterRef.current;
+      const centerThreshold = 0.02; // degrees ~ 2km, avoid small jitter recentering
+      const needsRecentering = !lastCenter || Math.abs(lastCenter.lat - nextLat) > centerThreshold || Math.abs(lastCenter.lng - nextLng) > centerThreshold;
+      if (!isDriverInView && !shouldFitRouteRef.current && needsRecentering) {
         map.easeTo({ center: [nextLng, nextLat], duration: 1000 });
-        lastCenterRef.current = { lat: nextLat, lng: nextLng };
+        lastCenterRef.current = { lat: nextLat, lng: nextLng, ts: Date.now() };
       }
 
       if (targetCoords) {
@@ -209,6 +217,8 @@ export default function DriverLocationAutoTracker() {
       (position) => {
         const nextLat = position.coords.latitude;
         const nextLng = position.coords.longitude;
+        latRef.current = nextLat;
+        lngRef.current = nextLng;
         renderLocation(nextLat, nextLng);
         setError(null);
         const now = Date.now();
@@ -292,12 +302,14 @@ export default function DriverLocationAutoTracker() {
           if (data?.id) {
             setHasActiveNavigation(true);
             setSuppressActiveState(true);
-            const needsRestore = routeIdRef.current !== data.id || !navTarget || !targetCoords;
-            if (needsRestore) {
+            const needsRestore = routeIdRef.current !== data.id || !navTarget;
+            if (routeIdRef.current !== data.id) {
               routeIdRef.current = data.id;
               setActiveRideId(data.id);
               joinRide(data.id, { role: "DRIVER" });
+            }
 
+            if (needsRestore) {
               // Restore saved explicit nav target (preferred) or saved nav mode
               try {
                 const tkey = `driverNavTarget_${data.id}`;
@@ -307,7 +319,7 @@ export default function DriverLocationAutoTracker() {
                     const parsed = JSON.parse(savedTarget);
                     if (parsed?.mode && parsed?.address) {
                       setNavTarget({ mode: parsed.mode === 'destination' ? 'destination' : 'pickup', address: parsed.address });
-                      void focusOnRide(data.id, parsed.mode === 'destination' ? 'destination' : 'pickup', parsed.address, lat, lng);
+                      void focusOnRide(data.id, parsed.mode === 'destination' ? 'destination' : 'pickup', parsed.address, latRef.current, lngRef.current);
                     }
                   } catch (e) {}
                 } else {
@@ -315,24 +327,15 @@ export default function DriverLocationAutoTracker() {
                   const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
                   if (saved === "driveToDestination" || saved === "finishRide") {
                     setNavTarget({ mode: 'destination', address: data?.dropoff_address ?? '' });
-                    void focusOnRide(data.id, "destination", data?.dropoff_address ?? null, lat, lng);
+                    void focusOnRide(data.id, "destination", data?.dropoff_address ?? null, latRef.current, lngRef.current);
                   } else if (saved === "driveToPickup") {
                     setNavTarget({ mode: 'pickup', address: data?.pickup_address ?? '' });
-                    void focusOnRide(data.id, "pickup", data?.pickup_address ?? null, lat, lng);
+                    void focusOnRide(data.id, "pickup", data?.pickup_address ?? null, latRef.current, lngRef.current);
                   }
                 }
               } catch (e) {
                 // ignore
               }
-            } else {
-              // If same ride id but we haven't set a targetCoords yet, try to restore
-              try {
-                const key = `driverNavMode_${data.id}`;
-                const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
-                if ((saved === "driveToDestination" || saved === "finishRide") && !targetCoords) {
-                  void focusOnRide(data.id, "destination", data?.dropoff_address ?? null, lat, lng);
-                }
-              } catch (e) {}
             }
           } else if (routeIdRef.current) {
             leaveRide(routeIdRef.current);
@@ -457,6 +460,16 @@ export default function DriverLocationAutoTracker() {
     driverLng?: number | null,
   ) {
     if (!rideId) return;
+    const targetKey = `${type}:${address ?? ''}`;
+    const last = lastFocusRef.current;
+    if (last?.address === address && last.mode === type) {
+      return;
+    }
+    if (pendingFocusRef.current?.address === address && pendingFocusRef.current.mode === type) {
+      return;
+    }
+
+    pendingFocusRef.current = { address: address ?? '', mode: type };
     routeIdRef.current = rideId;
     setHasActiveNavigation(true);
     setSuppressActiveState(true);
@@ -524,6 +537,10 @@ export default function DriverLocationAutoTracker() {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("Error focusing on ride target", err);
+    } finally {
+      if (pendingFocusRef.current?.address === address && pendingFocusRef.current.mode === type) {
+        pendingFocusRef.current = null;
+      }
     }
   }
 
@@ -532,7 +549,7 @@ export default function DriverLocationAutoTracker() {
       const rideId = e?.detail?.rideId ?? new URLSearchParams(window.location.search).get("activeRideId");
       const mode = e?.detail?.mode ?? "pickup";
       const targetAddress = e?.detail?.address ?? new URLSearchParams(window.location.search).get("pickupAddress");
-      if (rideId) void focusOnRide(rideId, mode, targetAddress, lat, lng);
+      if (rideId) void focusOnRide(rideId, mode, targetAddress, latRef.current, lngRef.current);
     }
 
     function onNavTarget(e: any) {
@@ -540,6 +557,9 @@ export default function DriverLocationAutoTracker() {
       const mode = e?.detail?.mode;
       const targetAddress = e?.detail?.address;
       if (rideId && mode && targetAddress) {
+        if (routeIdRef.current === rideId && navTarget?.mode === mode && navTarget.address === targetAddress && targetCoords) {
+          return;
+        }
         setNavTarget({ mode, address: targetAddress });
         setTargetCoords(null);
         lastFocusRef.current = null;
@@ -549,8 +569,8 @@ export default function DriverLocationAutoTracker() {
           setSuppressActiveState(true);
         }
         const ensureLocationAndFocus = async () => {
-          let currentLat = lat;
-          let currentLng = lng;
+          let currentLat = latRef.current;
+          let currentLng = lngRef.current;
           if (currentLat == null || currentLng == null) {
             const currentLocation = await getCurrentLocation();
             if (currentLocation) {
@@ -578,19 +598,19 @@ export default function DriverLocationAutoTracker() {
             const parsed = JSON.parse(savedTarget);
             if (parsed?.mode && parsed?.address) {
               setNavTarget({ mode: parsed.mode, address: parsed.address });
-              void focusOnRide(initialId, parsed.mode === 'destination' ? 'destination' : 'pickup', parsed.address, lat, lng);
+              void focusOnRide(initialId, parsed.mode === 'destination' ? 'destination' : 'pickup', parsed.address, latRef.current, lngRef.current);
             }
           } catch (e) {}
         } else {
           const saved = window.localStorage.getItem(`driverNavMode_${initialId}`);
           if (saved === "driveToDestination" || saved === "finishRide") {
             setNavTarget({ mode: 'destination', address: new URLSearchParams(window.location.search).get("dropoffAddress") ?? '' });
-            void focusOnRide(initialId, "destination", null, lat, lng);
+            void focusOnRide(initialId, "destination", null, latRef.current, lngRef.current);
           } else {
             const initialPickup = new URLSearchParams(window.location.search).get("pickupAddress");
             if (initialPickup) {
               setNavTarget({ mode: 'pickup', address: initialPickup });
-              void focusOnRide(initialId, "pickup", initialPickup, lat, lng);
+              void focusOnRide(initialId, "pickup", initialPickup, latRef.current, lngRef.current);
             }
           }
         }
@@ -601,14 +621,23 @@ export default function DriverLocationAutoTracker() {
       window.removeEventListener("rideAccepted", onRideAccepted);
       window.removeEventListener("driverNavTarget", onNavTarget);
     };
-  }, [lat, lng]);
+  }, []);
 
   useEffect(() => {
     if (!navTarget || !routeIdRef.current) return;
     if (lat == null || lng == null) return;
     const last = lastFocusRef.current;
+    const pending = pendingFocusRef.current;
     if (last?.address === navTarget.address && last.mode === navTarget.mode) return;
-    void focusOnRide(routeIdRef.current, navTarget.mode, navTarget.address, lat, lng);
+    if (pending?.address === navTarget.address && pending.mode === navTarget.mode) return;
+
+    pendingFocusRef.current = { address: navTarget.address, mode: navTarget.mode };
+    void focusOnRide(routeIdRef.current, navTarget.mode, navTarget.address, lat, lng).finally(() => {
+      const currentPending = pendingFocusRef.current;
+      if (currentPending?.address === navTarget.address && currentPending.mode === navTarget.mode) {
+        pendingFocusRef.current = null;
+      }
+    });
   }, [navTarget, lat, lng]);
 
   useEffect(() => {

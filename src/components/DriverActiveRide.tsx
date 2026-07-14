@@ -15,6 +15,7 @@ export default function DriverActiveRide() {
   const [showArrivalButton, setShowArrivalButton] = useState(false);
   const [arrivalNotified, setArrivalNotified] = useState(false);
   const activeRideIdRef = useRef<string | null>(null);
+  const lastDispatchedNavTargetRef = useRef<{ rideId: string; mode: string; address: string } | null>(null);
 
   useEffect(() => {
     const fetchActiveRide = async () => {
@@ -82,28 +83,22 @@ export default function DriverActiveRide() {
 
   useEffect(() => {
     if (!activeRide?.id || activeRide?.status !== "ACCEPTED") return;
-    if (navMode === "driveToPickup") {
-      window.dispatchEvent(
-        new CustomEvent("driverNavTarget", {
-          detail: {
-            mode: "pickup",
-            address: activeRide.pickup_address,
-            rideId: activeRide.id,
-          },
-        }),
-      );
+    const target = {
+      rideId: activeRide.id,
+      mode: navMode === "driveToPickup" ? "pickup" : "destination",
+      address: navMode === "driveToPickup" ? activeRide.pickup_address : activeRide.dropoff_address,
+    };
+    const last = lastDispatchedNavTargetRef.current;
+    if (last?.rideId === target.rideId && last.mode === target.mode && last.address === target.address) {
+      return;
     }
-    if (navMode === "driveToDestination" || navMode === "finishRide") {
-      window.dispatchEvent(
-        new CustomEvent("driverNavTarget", {
-          detail: {
-            mode: "destination",
-            address: activeRide.dropoff_address,
-            rideId: activeRide.id,
-          },
-        }),
-      );
-    }
+
+    lastDispatchedNavTargetRef.current = target;
+    window.dispatchEvent(
+      new CustomEvent("driverNavTarget", {
+        detail: target,
+      }),
+    );
   }, [activeRide, navMode]);
 
   if (error) {
