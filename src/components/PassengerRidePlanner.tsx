@@ -321,14 +321,19 @@ export default function PassengerRidePlanner() {
     setLoadingSuggestions(true);
     suggestTimer.current = window.setTimeout(async () => {
       try {
-          const res = await fetch(`/api/places/search?q=${encodeURIComponent(query)}`);
-          if (!res.ok) {
-            setSuggestions([]);
-            return;
-          }
+        const res = await fetch(`/api/places/search?q=${encodeURIComponent(query)}`);
+        if (!res.ok) {
+          setSuggestions([]);
+          return;
+        }
+
+        const data = await res.json();
+        const items: Suggestion[] = (data.features || []).map((feature: any) => ({
+          id: feature.id,
           place_name: feature.place_name,
           center: feature.center,
         }));
+
         setSuggestions(items);
       } catch {
         setSuggestions([]);
