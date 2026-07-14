@@ -661,6 +661,27 @@ export default function DriverLocationAutoTracker() {
     setStatus("Automatic GPS tracking is active.");
   }
 
+  function recenterToDriver() {
+    const map = mapRef.current;
+    const curLat = latRef.current ?? lat;
+    const curLng = lngRef.current ?? lng;
+    if (!map || curLat == null || curLng == null) {
+      try {
+        setStatus("Unable to recenter: driver location unknown.");
+      } catch {}
+      return;
+    }
+    try {
+      map.easeTo({ center: [curLng, curLat], zoom: Math.max(map.getZoom(), 15), duration: 800 });
+      lastCenterRef.current = { lat: curLat, lng: curLng, ts: Date.now() };
+      setStatus("Map centered on driver.");
+    } catch (e) {
+      try {
+        setStatus("Recenter failed.");
+      } catch {}
+    }
+  }
+
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
       <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900">
@@ -699,9 +720,14 @@ export default function DriverLocationAutoTracker() {
               </>
             )}
           </div>
-          <button type="button" className="btn btn-primary" disabled>
-            Automatic GPS tracking enabled
-          </button>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={recenterToDriver} className="btn btn-secondary">
+              Recenter to driver
+            </button>
+            <button type="button" className="btn btn-primary" disabled>
+              Automatic GPS tracking enabled
+            </button>
+          </div>
         </div>
       </div>
     </div>
