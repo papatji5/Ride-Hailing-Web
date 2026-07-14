@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient as createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 type LocalSocket = {
+  id?: string;
   on: (event: string, cb: (payload: any) => void) => void;
   off: (event: string, cb: (payload: any) => void) => void;
   emit: (event: string, payload?: any) => Promise<void>;
@@ -45,7 +46,10 @@ export function getSocket(): LocalSocket {
 
   void channel.subscribe().catch((e) => console.error('supabase channel subscribe error', e));
 
+  const clientId = `supabase-${Math.random().toString(36).slice(2,9)}`;
+
   adapter = {
+    id: clientId,
     on(event: string, cb: (payload: any) => void) {
       if (!listeners.has(event)) listeners.set(event, new Set());
       listeners.get(event)!.add(cb);
