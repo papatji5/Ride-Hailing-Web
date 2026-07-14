@@ -164,7 +164,7 @@ export default function DriverLocationAutoTracker() {
         // Only set initial view on first marker placement
         map.easeTo({ center: [nextLng, nextLat], zoom: Math.max(map.getZoom(), 15), duration: 1000 });
         initialMarkerPlacedRef.current = true;
-        lastCenterRef.current = { lat: nextLat, lng: nextLng };
+        lastCenterRef.current = { lat: nextLat, lng: nextLng, ts: Date.now() };
       }
 
       const currentBounds = map.getBounds();
