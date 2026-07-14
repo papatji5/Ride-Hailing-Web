@@ -148,6 +148,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [lastDriverPayload, setLastDriverPayload] = useState<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
   const [routeDuration, setRouteDuration] = useState<number | null>(null);
@@ -376,6 +377,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
 
     const handleDriverLocation = (data: any) => {
       console.debug("PassengerDestinationUpdater driver-location", { data, rideId });
+      setLastDriverPayload(data);
       if (String(data.rideId) === String(rideId) && typeof data.lat === "number" && typeof data.lng === "number") {
         setDriverLocation({ lat: data.lat, lng: data.lng });
 
@@ -410,6 +412,9 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
       socket.off("driver-location", handleDriverLocation);
     };
   }, [rideId]);
+
+  // Debug panel helper
+  const markerExists = !!carMarker.current;
 
   const selectSuggestion = async (suggestion: Suggestion) => {
     const point = { lng: suggestion.center[0], lat: suggestion.center[1] };
@@ -520,6 +525,11 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
             <div className="text-sm text-slate-300">{statusMessage}</div>
           ) : null}
           {mapError ? <div className="text-sm text-rose-400">{mapError}</div> : null}
+          <div className="mt-3 text-xs text-slate-400">
+            <div className="mb-1 font-semibold text-white">Debug (temp)</div>
+            <div>Last driver payload: {lastDriverPayload ? JSON.stringify(lastDriverPayload) : "(none)"}</div>
+            <div>Car marker exists: {markerExists ? "yes" : "no"}</div>
+          </div>
         </div>
       </div>
     </div>
