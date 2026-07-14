@@ -89,7 +89,7 @@ export default function DriverActiveRide() {
       address: navMode === "driveToPickup" ? activeRide.pickup_address : activeRide.dropoff_address,
     };
     const last = lastDispatchedNavTargetRef.current;
-    if (last?.rideId === target.rideId && last.mode === target.mode && last.address === target.address) {
+    if (last && last.rideId === target.rideId && last.mode === target.mode && last.address === target.address) {
       return;
     }
 
