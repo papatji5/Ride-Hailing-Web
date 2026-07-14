@@ -47,7 +47,7 @@ export function getSocket(): LocalSocket {
   };
 
   // subscribe once to incoming broadcasts and forward to local listeners
-  (channel as any).on('broadcast', {}, (msg: any) => {
+  (channel as any).on('broadcast', { event: '*' }, (msg: any) => {
     try {
       const ev = msg.event as string;
       const payload = msg.payload;
@@ -57,7 +57,14 @@ export function getSocket(): LocalSocket {
     }
   });
 
-  void (channel as any).subscribe().catch((e: any) => console.error('supabase channel subscribe error', e));
+  try {
+    const subscribeResult = (channel as any).subscribe();
+    if (subscribeResult && typeof subscribeResult.catch === 'function') {
+      subscribeResult.catch((e: any) => console.error('supabase channel subscribe error', e));
+    }
+  } catch (subErr) {
+    console.error('supabase channel subscribe failed', subErr);
+  }
 
   const clientId = `supabase-${Math.random().toString(36).slice(2,9)}`;
 
