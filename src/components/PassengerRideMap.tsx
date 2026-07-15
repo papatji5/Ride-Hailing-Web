@@ -50,15 +50,14 @@ export default function PassengerRideMap({
     if (!mapEl.current) return;
 
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-    if (!token) {
-      console.error("Mapbox token not found");
-      return;
+    if (token) {
+      mapboxgl.accessToken = token;
     }
+    const mapStyle = token ? "mapbox://styles/mapbox/streets-v12" : "https://demotiles.maplibre.org/style.json";
 
-    mapboxgl.accessToken = token;
     const map = new mapboxgl.Map({
       container: mapEl.current,
-      style: "mapbox://styles/mapbox/streets-v12",
+      style: mapStyle,
       center: [pickupLng, pickupLat],
       zoom: 13,
     });

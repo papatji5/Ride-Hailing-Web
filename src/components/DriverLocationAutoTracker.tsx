@@ -185,10 +185,14 @@ export default function DriverLocationAutoTracker() {
 
   useEffect(() => {
     if (!mapEl.current) return;
-    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+    if (token) {
+      mapboxgl.accessToken = token;
+    }
+    const mapStyle = token ? "mapbox://styles/mapbox/streets-v11" : "https://demotiles.maplibre.org/style.json";
     const map = new mapboxgl.Map({
       container: mapEl.current,
-      style: "mapbox://styles/mapbox/streets-v11",
+      style: mapStyle,
       center: [28.0473, -26.2041],
       zoom: 12,
     });
