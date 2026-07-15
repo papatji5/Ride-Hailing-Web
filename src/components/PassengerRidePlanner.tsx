@@ -575,7 +575,16 @@ export default function PassengerRidePlanner() {
   const canRequestRide = Boolean(pickup && dropoff && pickupAddressValue && dropoffAddressValue);
 
   return (
-    <section className="grid items-stretch gap-4">
+    <section className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(360px,1fr)]">
+
+      {/* Map column: shown above form on mobile, left column on desktop (wider) */}
+      <div className="rounded-xl border border-white/10 bg-slate-900 p-2 mb-3 lg:mb-0">
+        <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Live ride map</div>
+        <div
+          ref={mapFormEl}
+          style={{ width: "100%", height: "520px", borderRadius: 8, overflow: "hidden" }}
+        />
+      </div>
 
       <form onSubmit={handleFormSubmit} className="space-y-4 rounded-xl border border-white/10 bg-white/3 p-4">
         <div>
@@ -674,16 +683,7 @@ export default function PassengerRidePlanner() {
           {geoError ? <div className="mt-4 rounded-3xl bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{geoError}</div> : null}
         </div>
 
-        {/* Compact map (shown on mobile and desktop) */}
-        <div className="block">
-          <div className="rounded-xl border border-white/10 bg-slate-900 p-2 mb-3">
-            <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Live ride map</div>
-            <div
-              ref={mapFormEl}
-              style={{ width: "100%", height: "220px", borderRadius: 8, overflow: "hidden" }}
-            />
-          </div>
-        </div>
+        {/* Map moved to left column on larger screens */}
 
         <div className="rounded-[28px] border border-slate-700/70 bg-slate-900/90 p-5 text-sm text-slate-200 shadow-[0_25px_75px_rgba(15,23,42,0.28)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
