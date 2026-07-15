@@ -39,6 +39,7 @@ export default function PassengerRideMap({
   const dropoffMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [routeGeoJson, setRouteGeoJson] = useState<any>(null);
+  const [routeInfo, setRouteInfo] = useState<{ distance?: number; duration?: number } | null>(null);
   const [rideStatus, setRideStatus] = useState<string | null>(null);
   const [pickupRouteInfo, setPickupRouteInfo] = useState<{ distance?: number; duration?: number } | null>(null);
   const [destRouteInfo, setDestRouteInfo] = useState<{ distance?: number; duration?: number } | null>(null);
@@ -71,22 +72,17 @@ export default function PassengerRideMap({
       }
 
       // Pickup marker (green)
-      const pickupEl = createMarkerElement("#10b981");
+      const pickupEl = createLabelledMarker("#10b981", "P");
       pickupMarkerRef.current = new mapboxgl.Marker(pickupEl)
         .setLngLat([pickupLng, pickupLat])
+        .setPopup(new mapboxgl.Popup({ offset: 12 }).setText(pickupAddress))
         .addTo(map);
 
       // Dropoff marker (blue)
-      const dropoffEl = createMarkerElement("#3b82f6");
+      const dropoffEl = createLabelledMarker("#3b82f6", "D");
       dropoffMarkerRef.current = new mapboxgl.Marker(dropoffEl)
         .setLngLat([dropoffLng || pickupLng, dropoffLat || pickupLat])
-        .addTo(map);
-
-      // Car marker (red with icon)
-      const carEl = createCarMarker();
-      carMarkerRef.current = new mapboxgl.Marker(carEl)
-        .setLngLat([pickupLng, pickupLat])
-        .addTo(map);
+        .setPopup(new mapboxgl.Popup({ offset: 12 }).setText(dropoffAddress))
     });
 
     return () => {
@@ -224,6 +220,7 @@ export default function PassengerRideMap({
         };
 
         setRouteGeoJson(geoJson);
+        setRouteInfo({ distance: data.distance, duration: data.duration });
 
         // Add route source and layer
         if (!map.getSource("route")) {
@@ -243,12 +240,20 @@ export default function PassengerRideMap({
               },
               paint: {
                 "line-color": "#10b981",
-                "line-width": 3,
+                "line-width": 5,
+                "line-opacity": 0.95,
               },
             },
             "poi-label"
           );
+        } else {
+          const source = map.getSource("route") as mapboxgl.GeoJSONSource;
+          source.setData(geoJson);
         }
+
+        map.fitBounds(geoJson.geometry.coordinates as [number, number][], {
+          padding: 60,
+        });
       }
     } catch (err) {
       console.error("Error fetching route:", err);
@@ -296,7 +301,15 @@ export default function PassengerRideMap({
       {driverLocation && (
         <div className="mt-2 text-xs text-slate-400">
           <div>Driver location: {driverLocation.lat.toFixed(4)}, {driverLocation.lng.toFixed(4)}</div>
-          <div className="mt-1 flex gap-3">
+          {routeInfo ? (
+            <div className="mt-2 rounded-md border border-white/10 bg-slate-800/60 p-3 text-sm text-white">
+              <div className="font-medium">Ride route</div>
+              <div className="mt-1 text-slate-300">
+                {routeInfo.distance ? formatMeters(routeInfo.distance) : "Distance unavailable"} • {routeInfo.duration ? formatDuration(routeInfo.duration) : "ETA unavailable"}
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <div className="bg-slate-800/60 px-3 py-2 rounded-md">
               <div className="text-xxs text-slate-300">To pickup</div>
               <div className="text-sm font-medium text-white">
@@ -328,6 +341,23 @@ function createMarkerElement(color: string): HTMLElement {
   el.style.borderRadius = "50%";
   el.style.backgroundColor = color;
   el.style.border = "2px solid white";
+  return el;
+}
+
+function createLabelledMarker(color: string, label: string): HTMLElement {
+  const el = document.createElement("div");
+  el.style.width = "36px";
+  el.style.height = "36px";
+  el.style.display = "flex";
+  el.style.alignItems = "center";
+  el.style.justifyContent = "center";
+  el.style.borderRadius = "50%";
+  el.style.backgroundColor = color;
+  el.style.border = "2px solid white";
+  el.style.color = "white";
+  el.style.fontWeight = "700";
+  el.style.fontSize = "14px";
+  el.textContent = label;
   return el;
 }
 

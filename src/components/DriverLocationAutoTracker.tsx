@@ -407,9 +407,8 @@ export default function DriverLocationAutoTracker() {
       console.error("Driver directions API error", json);
       return;
     }
-    const route = json?.routes?.[0];
-    const coords = route?.geometry?.coordinates;
-    if (!route || !coords || !Array.isArray(coords) || coords.length === 0) {
+    const coords = json?.coordinates ?? json?.geometry?.coordinates;
+    if (!coords || !Array.isArray(coords) || coords.length === 0) {
       console.error("Driver route missing geometry", json);
       return;
     }
