@@ -586,23 +586,46 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
             <div className="mt-2 font-medium text-white">{currentDropoffAddress}</div>
           </div>
 
-          {driverLocation && navMode === 'pickup' ? (
+          {driverLocation ? (
+            <>
+              {navMode === 'pickup' ? (
+                <div className="rounded-xl border border-white/10 bg-blue-950/70 p-3">
+                  <div className="text-xs uppercase tracking-wide text-blue-300">Driver heading to pickup</div>
+                  <div className="mt-2 text-lg font-semibold text-cyan-300">
+                    {pickupRouteDistance ? formatMeters(pickupRouteDistance) : (pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A")}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-300">
+                    ETA: {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "N/A"}
+                  </div>
+                </div>
+              ) : navMode === 'destination' ? (
+                <div className="rounded-xl border border-white/10 bg-green-950/70 p-3">
+                  <div className="text-xs uppercase tracking-wide text-green-300">Driver heading to destination</div>
+                  <div className="mt-2 text-lg font-semibold text-cyan-300">
+                    {driverToDestDistance ? formatMeters(driverToDestDistance) : "N/A"}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-300">
+                    ETA: {driverToDestDuration ? formatMinutes(driverToDestDuration) : "N/A"}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                  <div className="text-xs uppercase tracking-wide text-slate-400">Driver distance from pickup</div>
+                  <div className="mt-2 text-lg font-semibold text-cyan-300">
+                    {pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A"}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-300">
+                    {pickupRouteDuration ? `ETA: ${formatMinutes(pickupRouteDuration)}` : "Calculating..."}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
             <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-              <div className="text-xs uppercase tracking-wide text-slate-400">Driver ETA to pickup</div>
-              <div className="mt-2 text-sm font-medium text-cyan-300">
-                {pickupRouteDistance ? formatMeters(pickupRouteDistance) : (pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A")} • {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "N/A"}
-              </div>
+              <div className="text-xs uppercase tracking-wide text-slate-400">Driver ETA</div>
+              <div className="mt-2 text-sm text-slate-400">Waiting for driver location...</div>
             </div>
-          ) : null}
-
-          {driverLocation && navMode === 'destination' ? (
-            <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-              <div className="text-xs uppercase tracking-wide text-slate-400">Driver ETA to destination</div>
-              <div className="mt-2 text-sm font-medium text-cyan-300">
-                {driverToDestDistance ? formatMeters(driverToDestDistance) : "N/A"} • {driverToDestDuration ? formatMinutes(driverToDestDuration) : "N/A"}
-              </div>
-            </div>
-          ) : null}
+          )}
 
           {isEditMode ? (
             <>
