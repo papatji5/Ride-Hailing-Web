@@ -53,7 +53,28 @@ export default function PassengerRideMap({
     if (token) {
       mapboxgl.accessToken = token;
     }
-    const mapStyle = token ? "mapbox://styles/mapbox/streets-v12" : "https://demotiles.maplibre.org/style.json";
+    const osmFallbackStyle = {
+      version: 8,
+      name: "OpenStreetMap",
+      sources: {
+        osm: {
+          type: "raster",
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          attribution: "© OpenStreetMap contributors",
+        },
+      },
+      layers: [
+        {
+          id: "osm-tiles",
+          type: "raster",
+          source: "osm",
+          minzoom: 0,
+          maxzoom: 19,
+        },
+      ],
+    } as const;
+    const mapStyle = token ? "mapbox://styles/mapbox/streets-v12" : osmFallbackStyle;
 
     const map = new mapboxgl.Map({
       container: mapEl.current,
