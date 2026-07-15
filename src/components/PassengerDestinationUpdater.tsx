@@ -461,8 +461,46 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
 
     socket.on("driver-location", handleDriverLocation);
 
+    // Additionally, when we get a driver-location update, fetch route/ETA to pickup and to selected dropoff
+    const extraHandler = async (data: any) => {
+      try {
+        if (String(data.rideId) !== String(rideId)) return;
+        if (typeof data.lat !== 'number' || typeof data.lng !== 'number') return;
+        // update driverLocation handled above; trigger route fetches if we have pickupPoint or dropoffPoint
+        if (mapLoaded) {
+          // fetch ETA/distance to pickup
+          if (pickupPoint) {
+            try {
+              const r = await fetchRoute({ lat: data.lat, lng: data.lng }, pickupPoint);
+              // we don't persist these, but you could set state if needed for UI
+            } catch (e) {}
+          }
+
+          // fetch ETA/distance to dropoff (if set)
+          if (dropoffPoint) {
+            try {
+              const r2 = await fetchRoute({ lat: data.lat, lng: data.lng }, dropoffPoint);
+              // update displayed route distance/duration for current selected dropoff
+              if (r2 && typeof r2.distance === 'number' && typeof r2.duration === 'number') {
+                setRouteDistance(r2.distance);
+                setRouteDuration(r2.duration);
+                setFareEstimate(computeFare(r2.distance, r2.duration));
+                if (mapRef.current?.getSource("route")) {
+                  const source = mapRef.current.getSource("route") as mapboxgl.GeoJSONSource;
+                  source.setData(r2.geometry ?? { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } });
+                }
+              }
+            } catch (e) {}
+          }
+        }
+      } catch (e) {}
+    };
+
+    socket.on("driver-location", extraHandler);
+
     return () => {
       socket.off("driver-location", handleDriverLocation);
+      socket.off("driver-location", extraHandler);
     };
   }, [rideId]);
 

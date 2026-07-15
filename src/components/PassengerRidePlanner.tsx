@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { getSocket } from "@/lib/socket";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import mapboxgl from "mapbox-gl";
@@ -203,11 +204,12 @@ export default function PassengerRidePlanner() {
     }
   }, []);
 
-  // Listen for driver-location events dispatched from DriverEtaSection and update the main map marker
+  // Listen for driver-location events via Socket.IO and update the main map car marker
   useEffect(() => {
-    const handler = (e: any) => {
+    const socket = getSocket();
+
+    const handle = (data: any) => {
       try {
-        const data = e?.detail;
         if (!data || data.lat == null || data.lng == null) return;
         const map = mapFormRef.current ?? mapRef.current;
         if (!map) return;
@@ -225,17 +227,21 @@ export default function PassengerRidePlanner() {
           carMarkerRef.current.setLngLat([data.lng, data.lat]);
         }
 
-        // Optionally keep driver visible
         try {
           map.easeTo({ center: [data.lng, data.lat], duration: 1000 });
         } catch (e) {}
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
     };
 
-    window.addEventListener('driver-location', handler as EventListener);
-    return () => window.removeEventListener('driver-location', handler as EventListener);
+    if (socket && socket.on) {
+      socket.on('driver-location', handle);
+    }
+
+    return () => {
+      try {
+        if (socket && socket.off) socket.off('driver-location', handle);
+      } catch (e) {}
+    };
   }, []);
 
 
