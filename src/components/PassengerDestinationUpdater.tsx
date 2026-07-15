@@ -581,10 +581,33 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
             <div className="mt-2 font-medium text-white">{pickupAddress}</div>
           </div>
 
+          <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+            <div className="text-xs uppercase tracking-wide text-slate-400">Your destination</div>
+            <div className="mt-2 font-medium text-white">{currentDropoffAddress}</div>
+          </div>
+
+          {driverLocation && navMode === 'pickup' ? (
+            <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-400">Driver ETA to pickup</div>
+              <div className="mt-2 text-sm font-medium text-cyan-300">
+                {pickupRouteDistance ? formatMeters(pickupRouteDistance) : (pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A")} • {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "N/A"}
+              </div>
+            </div>
+          ) : null}
+
+          {driverLocation && navMode === 'destination' ? (
+            <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-400">Driver ETA to destination</div>
+              <div className="mt-2 text-sm font-medium text-cyan-300">
+                {driverToDestDistance ? formatMeters(driverToDestDistance) : "N/A"} • {driverToDestDuration ? formatMinutes(driverToDestDuration) : "N/A"}
+              </div>
+            </div>
+          ) : null}
+
           {isEditMode ? (
             <>
               <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-                <div className="text-xs uppercase tracking-wide text-slate-400">Search destination</div>
+                <div className="text-xs uppercase tracking-wide text-slate-400">Search new destination</div>
                 <div className="mt-2">
                   <input
                     className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500"
@@ -611,50 +634,24 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
               </div>
 
               <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-                <div className="text-xs uppercase tracking-wide text-slate-400">Selected destination</div>
+                <div className="text-xs uppercase tracking-wide text-slate-400">New destination</div>
                 <div className="mt-2 font-medium text-white">{dropoffAddress || "Click on the map or search for a new destination"}</div>
                 <div className="mt-2 text-xs text-slate-400">Click any point on the map or search above to choose a new destination.</div>
               </div>
+
+              <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                <div className="text-xs uppercase tracking-wide text-slate-400">New fare estimate</div>
+                <div className="mt-2 text-white text-lg">
+                  {fareEstimate ? `R ${fareEstimate.fare.toFixed(2)}` : "Select a destination"}
+                </div>
+                {fareEstimate ? (
+                  <div className="mt-2 text-xs text-slate-400">
+                    Distance: {formatMeters(routeDistance)} • ETA: {formatMinutes(routeDuration)}
+                  </div>
+                ) : null}
+              </div>
             </>
           ) : null}
-
-          {driverLocation && navMode === 'pickup' ? (
-            <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-              <div className="text-xs uppercase tracking-wide text-slate-400">Driver location</div>
-              <div className="mt-2 font-medium text-white">{driverLocation.lat.toFixed(4)}, {driverLocation.lng.toFixed(4)}</div>
-              <div className="mt-3">
-                <div className="rounded-md border border-white/10 bg-slate-900/60 p-3">
-                  <div className="text-xxs text-slate-300">To pickup</div>
-                  <div className="text-sm font-medium text-white">{pickupRouteDistance ? formatMeters(pickupRouteDistance) : (pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A")} • {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "N/A"}</div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {driverLocation && navMode === 'destination' ? (
-            <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-              <div className="text-xs uppercase tracking-wide text-slate-400">Driver location</div>
-              <div className="mt-2 font-medium text-white">{driverLocation.lat.toFixed(4)}, {driverLocation.lng.toFixed(4)}</div>
-              <div className="mt-3">
-                <div className="rounded-md border border-white/10 bg-slate-900/60 p-3">
-                  <div className="text-xxs text-slate-300">To destination</div>
-                  <div className="text-sm font-medium text-white">{driverToDestDistance ? formatMeters(driverToDestDistance) : "N/A"} • {driverToDestDuration ? formatMinutes(driverToDestDuration) : "N/A"}</div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-            <div className="text-xs uppercase tracking-wide text-slate-400">New fare estimate</div>
-            <div className="mt-2 text-white text-lg">
-              {fareEstimate ? `R ${fareEstimate.fare.toFixed(2)}` : "Select a destination"}
-            </div>
-            {fareEstimate ? (
-              <div className="mt-2 text-xs text-slate-400">
-                Distance: {formatMeters(routeDistance)} • ETA: {formatMinutes(routeDuration)}
-              </div>
-            ) : null}
-          </div>
 
           <button
             type="button"
