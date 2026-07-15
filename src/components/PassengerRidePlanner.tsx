@@ -113,10 +113,8 @@ export default function PassengerRidePlanner() {
       ],
     } as any;
 
-    const isMobile = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 767px)").matches;
-
-    // Initialize mobile form map if on small screens
-    if (isMobile && mapFormEl.current) {
+    // Initialize the compact form map when the compact map element is present
+    if (mapFormEl.current) {
       const fm = new mapboxgl.Map({
         container: mapFormEl.current,
         style: "mapbox://styles/mapbox/streets-v11",
@@ -159,7 +157,7 @@ export default function PassengerRidePlanner() {
       return () => fm.remove();
     }
 
-    // Otherwise initialize the larger desktop map
+    // Otherwise initialize the larger desktop map (only if compact map element not present)
     if (mapEl.current) {
       const map = new mapboxgl.Map({
         container: mapEl.current,
@@ -577,10 +575,7 @@ export default function PassengerRidePlanner() {
   const canRequestRide = Boolean(pickup && dropoff && pickupAddressValue && dropoffAddressValue);
 
   return (
-    <section className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,1fr)]">
-      <div className="flex min-h-[280px] md:min-h-[520px] lg:min-h-[760px] flex-col rounded-xl border border-white/10 bg-slate-900 p-3 hidden md:flex">
-        <div ref={mapEl} className="min-h-[240px] md:min-h-[480px] lg:min-h-[760px] w-full flex-1 rounded-md" />
-      </div>
+    <section className="grid items-stretch gap-4">
 
       <form onSubmit={handleFormSubmit} className="space-y-4 rounded-xl border border-white/10 bg-white/3 p-4">
         <div>
@@ -679,8 +674,8 @@ export default function PassengerRidePlanner() {
           {geoError ? <div className="mt-4 rounded-3xl bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{geoError}</div> : null}
         </div>
 
-        {/* Mobile-only compact map above dropoff */}
-        <div className="block md:hidden">
+        {/* Compact map (shown on mobile and desktop) */}
+        <div className="block">
           <div className="rounded-xl border border-white/10 bg-slate-900 p-2 mb-3">
             <div className="text-xs uppercase tracking-wide text-slate-400 mb-2">Live ride map</div>
             <div
