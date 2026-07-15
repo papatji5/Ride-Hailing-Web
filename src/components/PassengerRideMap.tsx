@@ -53,6 +53,8 @@ export default function PassengerRideMap({
     if (token) {
       mapboxgl.accessToken = token;
     }
+    const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const forceOsm = urlParams?.get("force_osm") === "1";
     const fallbackStyle = {
       version: 8,
       name: "OpenStreetMap",
@@ -74,7 +76,8 @@ export default function PassengerRideMap({
         },
       ],
     } as any;
-    const mapStyle = token ? "mapbox://styles/mapbox/streets-v12" : fallbackStyle;
+    const mapStyle = forceOsm ? fallbackStyle : (token ? "mapbox://styles/mapbox/streets-v12" : fallbackStyle);
+    if (forceOsm) console.warn("Map: forcing OpenStreetMap raster fallback (force_osm=1)");
 
     const map = new mapboxgl.Map({
       container: mapEl.current,

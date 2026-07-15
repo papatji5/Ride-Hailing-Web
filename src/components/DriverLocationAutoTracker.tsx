@@ -211,7 +211,10 @@ export default function DriverLocationAutoTracker() {
       ],
     } as any;
 
-    const mapStyle = token ? "mapbox://styles/mapbox/streets-v11" : fallbackStyle;
+    const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const forceOsm = urlParams?.get("force_osm") === "1";
+    const mapStyle = forceOsm ? fallbackStyle : (token ? "mapbox://styles/mapbox/streets-v11" : fallbackStyle);
+    if (forceOsm) console.warn("Driver map: forcing OpenStreetMap raster fallback (force_osm=1)");
     const map = new mapboxgl.Map({
       container: mapEl.current,
       style: mapStyle,
