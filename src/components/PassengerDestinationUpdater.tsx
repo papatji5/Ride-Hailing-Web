@@ -473,34 +473,58 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
 
     socket.on("driver-location", handleDriverLocation);
 
+    // Fetch initial driver location immediately on mount (fallback before socket updates)
+    const fetchInitialLocation = async () => {
+      try {
+        const res = await fetch(`/api/driver/active-ride?rideId=${rideId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.driver?.driver_lat && data?.driver?.driver_lng) {
+            handleDriverLocation({
+              rideId,
+              lat: data.driver.driver_lat,
+              lng: data.driver.driver_lng,
+            });
+          }
+        }
+      } catch (e) {
+        console.debug("Failed to fetch initial driver location", e);
+      }
+    };
+
+    fetchInitialLocation();
+
     // Additionally, when we get a driver-location update, fetch route/ETA to pickup and to selected dropoff
     const extraHandler = async (data: any) => {
       try {
         if (String(data.rideId) !== String(rideId)) return;
         if (typeof data.lat !== 'number' || typeof data.lng !== 'number') return;
-        // update driverLocation handled above; trigger route fetches if we have pickupPoint or dropoffPoint
-        if (mapLoaded) {
-          // fetch ETA/distance to pickup
-          if (pickupPoint) {
-            try {
-              const r = await fetchRoute({ lat: data.lat, lng: data.lng }, pickupPoint);
-              if (r && typeof r.distance === 'number' && typeof r.duration === 'number') {
-                setPickupRouteDistance(r.distance);
-                setPickupRouteDuration(r.duration);
-              }
-            } catch (e) {}
-          }
+        
+        const driverLoc = { lat: data.lat, lng: data.lng };
+        
+        // fetch ETA/distance to pickup
+        if (pickupPoint && mapLoaded) {
+          try {
+            const r = await fetchRoute(driverLoc, pickupPoint);
+            if (r && typeof r.distance === 'number' && typeof r.duration === 'number') {
+              setPickupRouteDistance(r.distance);
+              setPickupRouteDuration(r.duration);
+            }
+          } catch (e) {}
+        }
 
-          // fetch ETA/distance from driver to dropoff (if set)
-          if (dropoffPoint) {
-            try {
-              const r2 = await fetchRoute({ lat: data.lat, lng: data.lng }, dropoffPoint);
+        // fetch ETA/distance from driver to dropoff (if set)
+        if (currentDropoffAddress && mapLoaded) {
+          try {
+            const dropoffPoint = await geocodeAddress(currentDropoffAddress);
+            if (dropoffPoint) {
+              const r2 = await fetchRoute(driverLoc, dropoffPoint);
               if (r2 && typeof r2.distance === 'number' && typeof r2.duration === 'number') {
                 setDriverToDestDistance(r2.distance);
                 setDriverToDestDuration(r2.duration);
               }
-            } catch (e) {}
-          }
+            }
+          } catch (e) {}
         }
       } catch (e) {}
     };
@@ -524,7 +548,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
       socket.off("driver-location", extraHandler);
       window.removeEventListener("driverNavTarget", handleNavTarget as EventListener);
     };
-  }, [rideId]);
+  }, [rideId, pickupPoint, currentDropoffAddress, mapLoaded]);
 
   // Debug panel helper
   const markerExists = !!carMarker.current;
@@ -595,7 +619,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
                     {pickupRouteDistance ? formatMeters(pickupRouteDistance) : (pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A")}
                   </div>
                   <div className="mt-1 text-sm text-slate-300">
-                    ETA: {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "N/A"}
+                    Estimated ETA: {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "N/A"}
                   </div>
                 </div>
               ) : navMode === 'destination' ? (
@@ -605,25 +629,25 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
                     {driverToDestDistance ? formatMeters(driverToDestDistance) : "N/A"}
                   </div>
                   <div className="mt-1 text-sm text-slate-300">
-                    ETA: {driverToDestDuration ? formatMinutes(driverToDestDuration) : "N/A"}
+                    Estimated ETA: {driverToDestDuration ? formatMinutes(driverToDestDuration) : "N/A"}
                   </div>
                 </div>
               ) : (
                 <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-400">Driver distance from pickup</div>
+                  <div className="text-xs uppercase tracking-wide text-slate-400">Distance from pickup</div>
                   <div className="mt-2 text-lg font-semibold text-cyan-300">
                     {pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A"}
                   </div>
                   <div className="mt-1 text-sm text-slate-300">
-                    {pickupRouteDuration ? `ETA: ${formatMinutes(pickupRouteDuration)}` : "Calculating..."}
+                    Estimated ETA: {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "Calculating..."}
                   </div>
                 </div>
               )}
             </>
           ) : (
             <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-              <div className="text-xs uppercase tracking-wide text-slate-400">Driver ETA</div>
-              <div className="mt-2 text-sm text-slate-400">Waiting for driver location...</div>
+              <div className="text-xs uppercase tracking-wide text-slate-400">Estimated ETA</div>
+              <div className="mt-2 text-sm text-slate-400">Connecting to driver...</div>
             </div>
           )}
 
