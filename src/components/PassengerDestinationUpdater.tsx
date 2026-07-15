@@ -430,6 +430,10 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
       if (String(data.rideId) === String(rideId) && typeof data.lat === "number" && typeof data.lng === "number") {
         setDriverLocation({ lat: data.lat, lng: data.lng });
 
+        try {
+          window.dispatchEvent(new CustomEvent('driver-location', { detail: { rideId: String(rideId), lat: data.lat, lng: data.lng } }));
+        } catch (e) {}
+
         const map = mapRef.current;
         if (!map) return;
 
@@ -549,6 +553,23 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
             <div className="mt-2 font-medium text-white">{dropoffAddress || "Click on the map or search for a new destination"}</div>
             <div className="mt-2 text-xs text-slate-400">Click any point on the map or search above to choose a new destination.</div>
           </div>
+
+          {driverLocation ? (
+            <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-400">Driver location</div>
+              <div className="mt-2 font-medium text-white">{driverLocation.lat.toFixed(4)}, {driverLocation.lng.toFixed(4)}</div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="rounded-md border border-white/10 bg-slate-900/60 p-3">
+                  <div className="text-xxs text-slate-300">To pickup</div>
+                  <div className="text-sm font-medium text-white">{routeDistance ? formatMeters(routeDistance) : (routeDistance == null && pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A")} • {routeDuration ? formatMinutes(routeDuration) : "N/A"}</div>
+                </div>
+                <div className="rounded-md border border-white/10 bg-slate-900/60 p-3">
+                  <div className="text-xxs text-slate-300">To destination</div>
+                  <div className="text-sm font-medium text-white">{routeDistance ? formatMeters(routeDistance) : "N/A"} • {routeDuration ? formatMinutes(routeDuration) : "N/A"}</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
             <div className="text-xs uppercase tracking-wide text-slate-400">New fare estimate</div>

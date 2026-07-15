@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import RideChat from "./RideChat";
 import PassengerDestinationUpdater from "./PassengerDestinationUpdater";
-import DriverEtaSection from "./DriverEtaSection";
 import { joinRide, leaveRide } from "@/lib/rideSocket";
 
 type PassengerActiveRideProps = {
