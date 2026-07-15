@@ -131,16 +131,7 @@ export default function PassengerActiveRide({ rides, driver, vehicle }: Passenge
                     <div className="mt-3 text-sm text-slate-400">
                       {(vehicle?.color || defaultVehicle.color) ? `${vehicle?.color || defaultVehicle.color} • ` : ""}{vehicle?.plate_number || defaultVehicle.plate_number}
                     </div>
-                    <div className="mt-4">
-                      {/* Driver ETA and distance (updates via Socket.IO driver-location events) */}
-                      <DriverEtaSection
-                        rideId={activeRide.id}
-                        pickupLat={Number(activeRide.pickup_lat) || undefined}
-                        pickupLng={Number(activeRide.pickup_lng) || undefined}
-                        dropoffLat={Number(activeRide.dropoff_lat) || undefined}
-                        dropoffLng={Number(activeRide.dropoff_lng) || undefined}
-                      />
-                    </div>
+                    <div className="mt-4">{/* ETA/info moved to Update Destination panel */}</div>
                   </div>
             </div>
           </div>
