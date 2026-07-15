@@ -144,6 +144,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
 
   const [pickupPoint, setPickupPoint] = useState<Point | null>(null);
   const [dropoffPoint, setDropoffPoint] = useState<Point | null>(null);
+  const [destinationPoint, setDestinationPoint] = useState<Point | null>(null);
   const [dropoffAddress, setDropoffAddress] = useState<string>(currentDropoffAddress);
   const [query, setQuery] = useState<string>("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -510,23 +511,26 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
               setPickupRouteDistance(r.distance);
               setPickupRouteDuration(r.duration);
             }
-          } catch (e) {}
+          } catch (e) {
+            console.debug("Failed to fetch pickup route", e);
+          }
         }
 
-        // fetch ETA/distance from driver to dropoff (if set)
-        if (currentDropoffAddress && mapLoaded) {
+        // fetch ETA/distance from driver to destination (use pre-cached dropoffPoint, NOT geocoding on every update)
+        if (dropoffPoint && mapLoaded) {
           try {
-            const dropoffPoint = await geocodeAddress(currentDropoffAddress);
-            if (dropoffPoint) {
-              const r2 = await fetchRoute(driverLoc, dropoffPoint);
-              if (r2 && typeof r2.distance === 'number' && typeof r2.duration === 'number') {
-                setDriverToDestDistance(r2.distance);
-                setDriverToDestDuration(r2.duration);
-              }
+            const r2 = await fetchRoute(driverLoc, dropoffPoint);
+            if (r2 && typeof r2.distance === 'number' && typeof r2.duration === 'number') {
+              setDriverToDestDistance(r2.distance);
+              setDriverToDestDuration(r2.duration);
             }
-          } catch (e) {}
+          } catch (e) {
+            console.debug("Failed to fetch destination route", e);
+          }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.debug("Error in extraHandler", e);
+      }
     };
 
     socket.on("driver-location", extraHandler);
@@ -548,7 +552,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
       socket.off("driver-location", extraHandler);
       window.removeEventListener("driverNavTarget", handleNavTarget as EventListener);
     };
-  }, [rideId, pickupPoint, currentDropoffAddress, mapLoaded]);
+  }, [rideId, pickupPoint, dropoffPoint, mapLoaded]);
 
   // Debug panel helper
   const markerExists = !!carMarker.current;
@@ -610,46 +614,36 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
             <div className="mt-2 font-medium text-white">{currentDropoffAddress}</div>
           </div>
 
-          {driverLocation ? (
-            <>
-              {navMode === 'pickup' ? (
-                <div className="rounded-xl border border-white/10 bg-blue-950/70 p-3">
-                  <div className="text-xs uppercase tracking-wide text-blue-300">Driver heading to pickup</div>
-                  <div className="mt-2 text-lg font-semibold text-cyan-300">
-                    {pickupRouteDistance ? formatMeters(pickupRouteDistance) : (pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A")}
-                  </div>
-                  <div className="mt-1 text-sm text-slate-300">
-                    Estimated ETA: {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "N/A"}
-                  </div>
-                </div>
-              ) : navMode === 'destination' ? (
-                <div className="rounded-xl border border-white/10 bg-green-950/70 p-3">
-                  <div className="text-xs uppercase tracking-wide text-green-300">Driver heading to destination</div>
-                  <div className="mt-2 text-lg font-semibold text-cyan-300">
-                    {driverToDestDistance ? formatMeters(driverToDestDistance) : "N/A"}
-                  </div>
-                  <div className="mt-1 text-sm text-slate-300">
-                    Estimated ETA: {driverToDestDuration ? formatMinutes(driverToDestDuration) : "N/A"}
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-400">Distance from pickup</div>
-                  <div className="mt-2 text-lg font-semibold text-cyan-300">
-                    {pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A"}
-                  </div>
-                  <div className="mt-1 text-sm text-slate-300">
-                    Estimated ETA: {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "Calculating..."}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
+          {driverLocation && navMode === 'pickup' ? (
+            <div className="rounded-xl border border-white/10 bg-blue-950/70 p-3">
+              <div className="text-xs uppercase tracking-wide text-blue-300">Driver heading to pickup</div>
+              <div className="mt-2 text-lg font-semibold text-cyan-300">
+                {pickupRouteDistance ? formatMeters(pickupRouteDistance) : "N/A"}
+              </div>
+              <div className="mt-1 text-sm text-slate-300">
+                Estimated ETA: {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "N/A"}
+              </div>
+            </div>
+          ) : null}
+
+          {driverLocation && navMode === 'destination' ? (
+            <div className="rounded-xl border border-white/10 bg-green-950/70 p-3">
+              <div className="text-xs uppercase tracking-wide text-green-300">Driver heading to destination</div>
+              <div className="mt-2 text-lg font-semibold text-cyan-300">
+                {driverToDestDistance ? formatMeters(driverToDestDistance) : "N/A"}
+              </div>
+              <div className="mt-1 text-sm text-slate-300">
+                Estimated ETA: {driverToDestDuration ? formatMinutes(driverToDestDuration) : "N/A"}
+              </div>
+            </div>
+          ) : null}
+
+          {driverLocation && !navMode ? (
             <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
               <div className="text-xs uppercase tracking-wide text-slate-400">Estimated ETA</div>
-              <div className="mt-2 text-sm text-slate-400">Connecting to driver...</div>
+              <div className="mt-2 text-sm text-slate-400">Waiting for driver to start navigation...</div>
             </div>
-          )}
+          ) : null}
 
           {isEditMode ? (
             <>
