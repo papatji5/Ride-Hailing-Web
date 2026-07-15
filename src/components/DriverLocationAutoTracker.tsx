@@ -189,8 +189,29 @@ export default function DriverLocationAutoTracker() {
     if (token) {
       mapboxgl.accessToken = token;
     }
-    const fallbackStyleUrl = "https://demotiles.maplibre.org/style.json";
-    const mapStyle = token ? "mapbox://styles/mapbox/streets-v11" : fallbackStyleUrl;
+    const fallbackStyle = {
+      version: 8,
+      name: "OpenStreetMap",
+      sources: {
+        osm: {
+          type: "raster",
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          attribution: "© OpenStreetMap contributors",
+        },
+      },
+      layers: [
+        {
+          id: "osm-tiles",
+          type: "raster",
+          source: "osm",
+          minzoom: 0,
+          maxzoom: 19,
+        },
+      ],
+    } as any;
+
+    const mapStyle = token ? "mapbox://styles/mapbox/streets-v11" : fallbackStyle;
     const map = new mapboxgl.Map({
       container: mapEl.current,
       style: mapStyle,
@@ -199,8 +220,8 @@ export default function DriverLocationAutoTracker() {
     });
 
     map.on("error", (event) => {
-      if (event && event.error && typeof event.error.message === "string" && event.error.message.includes("Unable to load style")) {
-        map.setStyle(fallbackStyleUrl);
+      if (event && event.error && typeof event.error.message === "string" && event.error.message.includes("style")) {
+        map.setStyle(fallbackStyle);
       }
     });
     mapRef.current = map;
