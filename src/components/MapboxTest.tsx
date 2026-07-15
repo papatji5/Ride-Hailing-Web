@@ -49,11 +49,43 @@ export default function MapboxTest() {
   useEffect(() => {
     if (!mapEl.current) return;
     mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+    const fallbackStyle = {
+      version: 8,
+      name: "OpenStreetMap",
+      sources: {
+        osm: {
+          type: "raster",
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          attribution: "© OpenStreetMap contributors",
+        },
+      },
+      layers: [
+        {
+          id: "osm-tiles",
+          type: "raster",
+          source: "osm",
+          minzoom: 0,
+          maxzoom: 19,
+        },
+      ],
+    } as any;
+
     const map = new mapboxgl.Map({
       container: mapEl.current,
       style: "mapbox://styles/mapbox/streets-v11",
       center: [28.0473, -26.2041],
       zoom: 12,
+    });
+
+    map.on("error", (event) => {
+      if (event && event.error && typeof event.error.message === "string" && event.error.message.includes("style")) {
+        try {
+          map.setStyle(fallbackStyle);
+        } catch (e) {
+          // ignore
+        }
+      }
     });
     mapRef.current = map;
 

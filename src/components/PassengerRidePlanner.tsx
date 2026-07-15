@@ -91,6 +91,28 @@ export default function PassengerRidePlanner() {
     if (!token) return;
     mapboxgl.accessToken = token;
 
+    const fallbackStyle = {
+      version: 8,
+      name: "OpenStreetMap",
+      sources: {
+        osm: {
+          type: "raster",
+          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          attribution: "© OpenStreetMap contributors",
+        },
+      },
+      layers: [
+        {
+          id: "osm-tiles",
+          type: "raster",
+          source: "osm",
+          minzoom: 0,
+          maxzoom: 19,
+        },
+      ],
+    } as any;
+
     const isMobile = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 767px)").matches;
 
     // Initialize mobile form map if on small screens
@@ -100,6 +122,13 @@ export default function PassengerRidePlanner() {
         style: "mapbox://styles/mapbox/streets-v11",
         center: [28.0473, -26.2041],
         zoom: 12,
+      });
+      fm.on("error", (event) => {
+        if (event && event.error && typeof event.error.message === "string" && event.error.message.includes("style")) {
+          try {
+            fm.setStyle(fallbackStyle);
+          } catch (e) {}
+        }
       });
       mapFormRef.current = fm;
 
@@ -137,6 +166,13 @@ export default function PassengerRidePlanner() {
         style: "mapbox://styles/mapbox/streets-v11",
         center: [28.0473, -26.2041],
         zoom: 12,
+      });
+      map.on("error", (event) => {
+        if (event && event.error && typeof event.error.message === "string" && event.error.message.includes("style")) {
+          try {
+            map.setStyle(fallbackStyle);
+          } catch (e) {}
+        }
       });
       mapRef.current = map;
 
