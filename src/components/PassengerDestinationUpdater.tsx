@@ -481,11 +481,36 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
         if (res.ok) {
           const data = await res.json();
           if (data?.driver?.driver_lat && data?.driver?.driver_lng) {
+            const driverLoc = { lat: data.driver.driver_lat, lng: data.driver.driver_lng };
             handleDriverLocation({
               rideId,
-              lat: data.driver.driver_lat,
-              lng: data.driver.driver_lng,
+              lat: driverLoc.lat,
+              lng: driverLoc.lng,
             });
+            
+            // Immediately calculate routes after getting initial location
+            setTimeout(async () => {
+              try {
+                if (pickupPoint && mapLoaded) {
+                  const r = await fetchRoute(driverLoc, pickupPoint);
+                  if (r && typeof r.distance === 'number' && typeof r.duration === 'number') {
+                    console.debug("Initial pickup route", { distance: r.distance, duration: r.duration });
+                    setPickupRouteDistance(r.distance);
+                    setPickupRouteDuration(r.duration);
+                  }
+                }
+                if (dropoffPoint && mapLoaded) {
+                  const r2 = await fetchRoute(driverLoc, dropoffPoint);
+                  if (r2 && typeof r2.distance === 'number' && typeof r2.duration === 'number') {
+                    console.debug("Initial destination route", { distance: r2.distance, duration: r2.duration });
+                    setDriverToDestDistance(r2.distance);
+                    setDriverToDestDuration(r2.duration);
+                  }
+                }
+              } catch (e) {
+                console.debug("Failed to calculate initial routes", e);
+              }
+            }, 500);
           }
         }
       } catch (e) {
@@ -634,22 +659,12 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
                 Estimated ETA: {driverToDestDuration ? formatMinutes(driverToDestDuration) : "Calculating..."}
               </div>
             </div>
-          ) : driverLocation ? (
-            <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-              <div className="text-xs uppercase tracking-wide text-slate-400">Estimated ETA to pickup</div>
-              <div className="mt-2 text-lg font-semibold text-cyan-300">
-                {pickupRouteDistance ? formatMeters(pickupRouteDistance) : "Calculating..."}
-              </div>
-              <div className="mt-1 text-sm text-slate-300">
-                {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "Calculating..."}
-              </div>
-            </div>
-          ) : (
+          ) : !driverLocation ? (
             <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
               <div className="text-xs uppercase tracking-wide text-slate-400">Estimated ETA</div>
               <div className="mt-2 text-sm text-slate-400">Connecting to driver...</div>
             </div>
-          )}
+          ) : null}
 
           {isEditMode ? (
             <>
