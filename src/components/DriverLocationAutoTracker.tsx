@@ -445,8 +445,8 @@ export default function DriverLocationAutoTracker() {
     }
 
     setRouteInfo({
-      distanceKm: Math.round((route.distance / 1000) * 10) / 10,
-      durationMin: Math.round((route.duration / 60) * 10) / 10,
+      distanceKm: Math.round(((json?.distance ?? 0) / 1000) * 10) / 10,
+      durationMin: Math.round(((json?.duration ?? 0) / 60) * 10) / 10,
     });
     lastRouteFromRef.current = { lat: from.lat, lng: from.lng, ts: now };
   }
