@@ -58,6 +58,7 @@ export default function PassengerRidePlanner() {
   const mapFormRef = useRef<mapboxgl.Map | null>(null);
   const pickupMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const dropoffMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const carMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const suggestTimer = useRef<number | null>(null);
 
   const [pickup, setPickup] = useState<{ lng: number; lat: number } | null>(null);
@@ -200,6 +201,41 @@ export default function PassengerRidePlanner() {
 
       return () => map.remove();
     }
+  }, []);
+
+  // Listen for driver-location events dispatched from DriverEtaSection and update the main map marker
+  useEffect(() => {
+    const handler = (e: any) => {
+      try {
+        const data = e?.detail;
+        if (!data || data.lat == null || data.lng == null) return;
+        const map = mapFormRef.current ?? mapRef.current;
+        if (!map) return;
+
+        if (!carMarkerRef.current) {
+          const el = document.createElement('div');
+          el.style.width = '28px';
+          el.style.height = '28px';
+          el.style.borderRadius = '50%';
+          el.style.backgroundColor = '#0369a1';
+          el.style.border = '2px solid white';
+          el.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+          carMarkerRef.current = new mapboxgl.Marker(el).setLngLat([data.lng, data.lat]).addTo(map);
+        } else {
+          carMarkerRef.current.setLngLat([data.lng, data.lat]);
+        }
+
+        // Optionally keep driver visible
+        try {
+          map.easeTo({ center: [data.lng, data.lat], duration: 1000 });
+        } catch (e) {}
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    window.addEventListener('driver-location', handler as EventListener);
+    return () => window.removeEventListener('driver-location', handler as EventListener);
   }, []);
 
 

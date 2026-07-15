@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import RideChat from "./RideChat";
 import PassengerDestinationUpdater from "./PassengerDestinationUpdater";
-import PassengerRideMap from "./PassengerRideMap";
+import DriverEtaSection from "./DriverEtaSection";
 import { joinRide, leaveRide } from "@/lib/rideSocket";
 
 type PassengerActiveRideProps = {
@@ -133,14 +133,13 @@ export default function PassengerActiveRide({ rides, driver, vehicle }: Passenge
                       {(vehicle?.color || defaultVehicle.color) ? `${vehicle?.color || defaultVehicle.color} • ` : ""}{vehicle?.plate_number || defaultVehicle.plate_number}
                     </div>
                     <div className="mt-4">
-                      <PassengerRideMap
+                      {/* Driver ETA and distance (updates via Socket.IO driver-location events) */}
+                      <DriverEtaSection
                         rideId={activeRide.id}
                         pickupLat={Number(activeRide.pickup_lat) || undefined}
                         pickupLng={Number(activeRide.pickup_lng) || undefined}
-                        pickupAddress={activeRide.pickup_address || ""}
                         dropoffLat={Number(activeRide.dropoff_lat) || undefined}
                         dropoffLng={Number(activeRide.dropoff_lng) || undefined}
-                        dropoffAddress={activeRide.dropoff_address || ""}
                       />
                     </div>
                   </div>
