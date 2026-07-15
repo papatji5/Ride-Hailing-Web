@@ -9,6 +9,7 @@ type Props = {
   rideId: string;
   pickupAddress: string;
   currentDropoffAddress: string;
+  isEditMode?: boolean;
   onUpdated: (updated: { dropoff_address: string }) => void;
 };
 
@@ -133,7 +134,7 @@ function createCarMarker(): HTMLElement {
   return el;
 }
 
-export default function PassengerDestinationUpdater({ rideId, pickupAddress, currentDropoffAddress, onUpdated }: Props) {
+export default function PassengerDestinationUpdater({ rideId, pickupAddress, currentDropoffAddress, isEditMode, onUpdated }: Props) {
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const pickupMarker = useRef<mapboxgl.Marker | null>(null);
@@ -570,7 +571,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
 
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-4 text-sm text-slate-200">
-      <h3 className="mb-3 text-lg font-semibold text-white">Update destination on map</h3>
+      <h3 className="mb-3 text-lg font-semibold text-white">Live route map</h3>
       <div className="grid gap-3 lg:grid-cols-[1.25fr_0.9fr]">
         <div className="min-h-[360px] rounded-xl overflow-hidden border border-white/10 bg-slate-900" ref={mapEl} />
 
@@ -580,38 +581,42 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
             <div className="mt-2 font-medium text-white">{pickupAddress}</div>
           </div>
 
-          <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-            <div className="text-xs uppercase tracking-wide text-slate-400">Search destination</div>
-            <div className="mt-2">
-              <input
-                className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500"
-                placeholder="Type an address or place"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                aria-label="Search destination"
-              />
-              {loadingSuggestions ? <div className="mt-2 text-xs text-slate-400">Searching...</div> : null}
-              {suggestions.length > 0 ? (
-                <ul className="mt-2 max-h-48 overflow-auto rounded-md border border-white/10 bg-slate-900 p-1 text-sm">
-                  {suggestions.map((suggestion) => (
-                    <li
-                      key={suggestion.id}
-                      className="cursor-pointer rounded px-2 py-1 hover:bg-white/5 text-slate-300 hover:text-white"
-                      onClick={() => selectSuggestion(suggestion)}
-                    >
-                      {suggestion.place_name}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          </div>
+          {isEditMode ? (
+            <>
+              <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                <div className="text-xs uppercase tracking-wide text-slate-400">Search destination</div>
+                <div className="mt-2">
+                  <input
+                    className="w-full rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-500"
+                    placeholder="Type an address or place"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    aria-label="Search destination"
+                  />
+                  {loadingSuggestions ? <div className="mt-2 text-xs text-slate-400">Searching...</div> : null}
+                  {suggestions.length > 0 ? (
+                    <ul className="mt-2 max-h-48 overflow-auto rounded-md border border-white/10 bg-slate-900 p-1 text-sm">
+                      {suggestions.map((suggestion) => (
+                        <li
+                          key={suggestion.id}
+                          className="cursor-pointer rounded px-2 py-1 hover:bg-white/5 text-slate-300 hover:text-white"
+                          onClick={() => selectSuggestion(suggestion)}
+                        >
+                          {suggestion.place_name}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
 
-          <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-            <div className="text-xs uppercase tracking-wide text-slate-400">Selected destination</div>
-            <div className="mt-2 font-medium text-white">{dropoffAddress || "Click on the map or search for a new destination"}</div>
-            <div className="mt-2 text-xs text-slate-400">Click any point on the map or search above to choose a new destination.</div>
-          </div>
+              <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+                <div className="text-xs uppercase tracking-wide text-slate-400">Selected destination</div>
+                <div className="mt-2 font-medium text-white">{dropoffAddress || "Click on the map or search for a new destination"}</div>
+                <div className="mt-2 text-xs text-slate-400">Click any point on the map or search above to choose a new destination.</div>
+              </div>
+            </>
+          ) : null}
 
           {driverLocation && navMode === 'pickup' ? (
             <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
@@ -654,12 +659,13 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving || !dropoffPoint || !fareEstimate}
+            disabled={saving || !dropoffPoint || !fareEstimate || !isEditMode}
             className="rounded-full bg-gradient-to-r from-blue-600 to-cyan-400 px-4 py-2 text-sm font-semibold text-white"
+            style={{ display: isEditMode ? "block" : "none" }}
           >
             {saving ? "Saving destination..." : "Save new destination"}
           </button>
-          {statusMessage ? (
+          {statusMessage && isEditMode ? (
             <div className="text-sm text-slate-300">{statusMessage}</div>
           ) : null}
           {mapError ? <div className="text-sm text-rose-400">{mapError}</div> : null}

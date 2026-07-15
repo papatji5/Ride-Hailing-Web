@@ -103,16 +103,16 @@ export default function PassengerActiveRide({ rides, driver, vehicle }: Passenge
               {showUpdater ? "Close update" : "Update destination"}
             </button>
           </div>
-          {showUpdater ? (
-            <PassengerDestinationUpdater
-              rideId={activeRide.id}
-              pickupAddress={activeRide.pickup_address || ""}
-              currentDropoffAddress={activeRide.dropoff_address || ""}
-              onUpdated={(updated) => {
-                setActiveRide((prev: any) => ({ ...prev, ...updated }));
-              }}
-            />
-          ) : null}
+
+          <PassengerDestinationUpdater
+            rideId={activeRide.id}
+            pickupAddress={activeRide.pickup_address || ""}
+            currentDropoffAddress={activeRide.dropoff_address || ""}
+            isEditMode={showUpdater}
+            onUpdated={(updated) => {
+              setActiveRide((prev: any) => ({ ...prev, ...updated }));
+            }}
+          />
         </div>
 
         <div className="space-y-4">
