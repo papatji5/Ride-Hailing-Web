@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import RideChat from "./RideChat";
 import PassengerDestinationUpdater from "./PassengerDestinationUpdater";
+import PassengerRideMap from "./PassengerRideMap";
 import { joinRide, leaveRide } from "@/lib/rideSocket";
 
 type PassengerActiveRideProps = {
@@ -124,23 +125,25 @@ export default function PassengerActiveRide({ rides, driver, vehicle }: Passenge
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-3">
-                <div className="text-xs uppercase tracking-[0.22em] text-slate-400">Vehicle</div>
-                <div className="mt-2 text-base font-semibold text-white">
-                  {vehicle?.make || defaultVehicle.make} {vehicle?.model || defaultVehicle.model}
-                </div>
-                <div className="mt-3 rounded-3xl overflow-hidden border border-white/10 bg-slate-900">
-                  <img
-                    src={defaultVehicle.carPhotoSrc}
-                    alt={defaultVehicle.carPhotoAlt}
-                    width={320}
-                    height={180}
-                    className="object-cover h-full w-full"
-                  />
-                </div>
-                <div className="mt-3 text-sm text-slate-400">
-                  {(vehicle?.color || defaultVehicle.color) ? `${vehicle?.color || defaultVehicle.color} • ` : ""}{vehicle?.plate_number || defaultVehicle.plate_number}
-                </div>
-              </div>
+                    <div className="text-xs uppercase tracking-[0.22em] text-slate-400">Vehicle</div>
+                    <div className="mt-2 text-base font-semibold text-white">
+                      {vehicle?.make || defaultVehicle.make} {vehicle?.model || defaultVehicle.model}
+                    </div>
+                    <div className="mt-3 text-sm text-slate-400">
+                      {(vehicle?.color || defaultVehicle.color) ? `${vehicle?.color || defaultVehicle.color} • ` : ""}{vehicle?.plate_number || defaultVehicle.plate_number}
+                    </div>
+                    <div className="mt-4">
+                      <PassengerRideMap
+                        rideId={activeRide.id}
+                        pickupLat={Number(activeRide.pickup_lat) || undefined}
+                        pickupLng={Number(activeRide.pickup_lng) || undefined}
+                        pickupAddress={activeRide.pickup_address || ""}
+                        dropoffLat={Number(activeRide.dropoff_lat) || undefined}
+                        dropoffLng={Number(activeRide.dropoff_lng) || undefined}
+                        dropoffAddress={activeRide.dropoff_address || ""}
+                      />
+                    </div>
+                  </div>
             </div>
           </div>
 
