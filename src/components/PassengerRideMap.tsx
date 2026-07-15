@@ -53,28 +53,8 @@ export default function PassengerRideMap({
     if (token) {
       mapboxgl.accessToken = token;
     }
-    const osmFallbackStyle = {
-      version: 8,
-      name: "OpenStreetMap",
-      sources: {
-        osm: {
-          type: "raster",
-          tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-          tileSize: 256,
-          attribution: "© OpenStreetMap contributors",
-        },
-      },
-      layers: [
-        {
-          id: "osm-tiles",
-          type: "raster",
-          source: "osm",
-          minzoom: 0,
-          maxzoom: 19,
-        },
-      ],
-    } as mapboxgl.Style;
-    const mapStyle = token ? "mapbox://styles/mapbox/streets-v12" : osmFallbackStyle;
+    const fallbackStyleUrl = "https://demotiles.maplibre.org/style.json";
+    const mapStyle = token ? "mapbox://styles/mapbox/streets-v12" : fallbackStyleUrl;
 
     const map = new mapboxgl.Map({
       container: mapEl.current,
@@ -103,6 +83,15 @@ export default function PassengerRideMap({
       dropoffMarkerRef.current = new mapboxgl.Marker(dropoffEl)
         .setLngLat([dropoffLng || pickupLng, dropoffLat || pickupLat])
         .setPopup(new mapboxgl.Popup({ offset: 12 }).setText(dropoffAddress))
+        .addTo(map);
+
+      map.resize();
+    });
+
+    map.on("error", (event) => {
+      if (event && event.error && typeof event.error.message === "string" && event.error.message.includes("Unable to load style")) {
+        map.setStyle(fallbackStyleUrl);
+      }
     });
 
     return () => {
