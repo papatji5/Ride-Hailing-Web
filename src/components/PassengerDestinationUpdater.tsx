@@ -618,32 +618,38 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
             <div className="rounded-xl border border-white/10 bg-blue-950/70 p-3">
               <div className="text-xs uppercase tracking-wide text-blue-300">Driver heading to pickup</div>
               <div className="mt-2 text-lg font-semibold text-cyan-300">
-                {pickupRouteDistance ? formatMeters(pickupRouteDistance) : "N/A"}
+                {pickupRouteDistance ? formatMeters(pickupRouteDistance) : "Calculating..."}
               </div>
               <div className="mt-1 text-sm text-slate-300">
-                Estimated ETA: {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "N/A"}
+                Estimated ETA: {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "Calculating..."}
               </div>
             </div>
-          ) : null}
-
-          {driverLocation && navMode === 'destination' ? (
+          ) : driverLocation && navMode === 'destination' ? (
             <div className="rounded-xl border border-white/10 bg-green-950/70 p-3">
               <div className="text-xs uppercase tracking-wide text-green-300">Driver heading to destination</div>
               <div className="mt-2 text-lg font-semibold text-cyan-300">
-                {driverToDestDistance ? formatMeters(driverToDestDistance) : "N/A"}
+                {driverToDestDistance ? formatMeters(driverToDestDistance) : "Calculating..."}
               </div>
               <div className="mt-1 text-sm text-slate-300">
-                Estimated ETA: {driverToDestDuration ? formatMinutes(driverToDestDuration) : "N/A"}
+                Estimated ETA: {driverToDestDuration ? formatMinutes(driverToDestDuration) : "Calculating..."}
               </div>
             </div>
-          ) : null}
-
-          {driverLocation && !navMode ? (
+          ) : driverLocation ? (
+            <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-400">Estimated ETA to pickup</div>
+              <div className="mt-2 text-lg font-semibold text-cyan-300">
+                {pickupRouteDistance ? formatMeters(pickupRouteDistance) : "Calculating..."}
+              </div>
+              <div className="mt-1 text-sm text-slate-300">
+                {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "Calculating..."}
+              </div>
+            </div>
+          ) : (
             <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
               <div className="text-xs uppercase tracking-wide text-slate-400">Estimated ETA</div>
-              <div className="mt-2 text-sm text-slate-400">Waiting for driver to start navigation...</div>
+              <div className="mt-2 text-sm text-slate-400">Connecting to driver...</div>
             </div>
-          ) : null}
+          )}
 
           {isEditMode ? (
             <>
