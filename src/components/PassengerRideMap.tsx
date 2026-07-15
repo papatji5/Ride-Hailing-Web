@@ -251,7 +251,13 @@ export default function PassengerRideMap({
           source.setData(geoJson);
         }
 
-        map.fitBounds(geoJson.geometry.coordinates as [number, number][], {
+        const routeCoords = geoJson.geometry.coordinates as [number, number][];
+        const bounds = routeCoords.reduce(
+          (acc, coord) => acc.extend(coord),
+          new mapboxgl.LngLatBounds(routeCoords[0], routeCoords[0]),
+        );
+
+        map.fitBounds(bounds, {
           padding: 60,
         });
       }
