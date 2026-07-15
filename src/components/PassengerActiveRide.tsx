@@ -45,6 +45,7 @@ const defaultVehicle = {
 
 export default function PassengerActiveRide({ rides, driver, vehicle }: PassengerActiveRideProps) {
   const [activeRide, setActiveRide] = useState<any>(null);
+  const [showUpdater, setShowUpdater] = useState<boolean>(false);
 
   useEffect(() => {
     // Find an accepted or active ride
@@ -93,14 +94,25 @@ export default function PassengerActiveRide({ rides, driver, vehicle }: Passenge
             ) : null}
           </div>
 
-          <PassengerDestinationUpdater
-            rideId={activeRide.id}
-            pickupAddress={activeRide.pickup_address || ""}
-            currentDropoffAddress={activeRide.dropoff_address || ""}
-            onUpdated={(updated) => {
-              setActiveRide((prev: any) => ({ ...prev, ...updated }));
-            }}
-          />
+          <div className="mb-3">
+            <button
+              type="button"
+              className="rounded-full bg-gradient-to-r from-blue-600 to-cyan-400 px-4 py-2 text-sm font-semibold text-white"
+              onClick={() => setShowUpdater((s) => !s)}
+            >
+              {showUpdater ? "Close update" : "Update destination"}
+            </button>
+          </div>
+          {showUpdater ? (
+            <PassengerDestinationUpdater
+              rideId={activeRide.id}
+              pickupAddress={activeRide.pickup_address || ""}
+              currentDropoffAddress={activeRide.dropoff_address || ""}
+              onUpdated={(updated) => {
+                setActiveRide((prev: any) => ({ ...prev, ...updated }));
+              }}
+            />
+          ) : null}
         </div>
 
         <div className="space-y-4">

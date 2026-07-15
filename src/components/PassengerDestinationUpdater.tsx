@@ -148,12 +148,17 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [navMode, setNavMode] = useState<'pickup' | 'destination' | null>(null);
   const [lastDriverPayload, setLastDriverPayload] = useState<any>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
   const [routeDuration, setRouteDuration] = useState<number | null>(null);
   const [fareEstimate, setFareEstimate] = useState<FareBreakdown | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [pickupRouteDistance, setPickupRouteDistance] = useState<number | null>(null);
+  const [pickupRouteDuration, setPickupRouteDuration] = useState<number | null>(null);
+  const [driverToDestDistance, setDriverToDestDistance] = useState<number | null>(null);
+  const [driverToDestDuration, setDriverToDestDuration] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const lastFitRef = useRef<number | null>(null);
@@ -365,11 +370,10 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
     setFareEstimate(null);
     setMapError(null);
 
-    // Use driver location if available, otherwise use pickup point
-    const startPoint = driverLocation ? { lat: driverLocation.lat, lng: driverLocation.lng } : pickupPoint;
-    if (!startPoint) return;
+    // For fare estimation compute route from pickup -> dropoff
+    if (!pickupPoint) return;
 
-    fetchRoute(startPoint, dropoffPoint)
+    fetchRoute(pickupPoint, dropoffPoint)
       .then((data) => {
         if (canceled) return;
         setRouteDistance(data.distance);
@@ -378,7 +382,7 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
         setFareEstimate(fare);
         if (mapRef.current?.getSource("route")) {
           const source = mapRef.current.getSource("route") as mapboxgl.GeoJSONSource;
-          source.setData({ type: "Feature", properties: {}, geometry: data.geometry });
+          source.setData(data.geometry ?? { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } });
         }
       })
       .catch((error) => {
@@ -459,6 +463,13 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
       }
     };
 
+    // initialize navMode from localStorage if present
+    try {
+      const stored = window.localStorage.getItem(`driverNavMode_${rideId}`);
+      if (stored === "driveToPickup") setNavMode("pickup");
+      else if (stored === "driveToDestination" || stored === "finishRide") setNavMode("destination");
+    } catch (e) {}
+
     socket.on("driver-location", handleDriverLocation);
 
     // Additionally, when we get a driver-location update, fetch route/ETA to pickup and to selected dropoff
@@ -472,23 +483,20 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
           if (pickupPoint) {
             try {
               const r = await fetchRoute({ lat: data.lat, lng: data.lng }, pickupPoint);
-              // we don't persist these, but you could set state if needed for UI
+              if (r && typeof r.distance === 'number' && typeof r.duration === 'number') {
+                setPickupRouteDistance(r.distance);
+                setPickupRouteDuration(r.duration);
+              }
             } catch (e) {}
           }
 
-          // fetch ETA/distance to dropoff (if set)
+          // fetch ETA/distance from driver to dropoff (if set)
           if (dropoffPoint) {
             try {
               const r2 = await fetchRoute({ lat: data.lat, lng: data.lng }, dropoffPoint);
-              // update displayed route distance/duration for current selected dropoff
               if (r2 && typeof r2.distance === 'number' && typeof r2.duration === 'number') {
-                setRouteDistance(r2.distance);
-                setRouteDuration(r2.duration);
-                setFareEstimate(computeFare(r2.distance, r2.duration));
-                if (mapRef.current?.getSource("route")) {
-                  const source = mapRef.current.getSource("route") as mapboxgl.GeoJSONSource;
-                  source.setData(r2.geometry ?? { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } });
-                }
+                setDriverToDestDistance(r2.distance);
+                setDriverToDestDuration(r2.duration);
               }
             } catch (e) {}
           }
@@ -498,9 +506,22 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
 
     socket.on("driver-location", extraHandler);
 
+    const handleNavTarget = (e: any) => {
+      try {
+        const d = e?.detail;
+        if (!d || String(d.rideId) !== String(rideId)) return;
+        if (d.mode === "pickup") setNavMode("pickup");
+        else if (d.mode === "destination") setNavMode("destination");
+        else setNavMode(null);
+      } catch (e) {}
+    };
+
+    window.addEventListener("driverNavTarget", handleNavTarget as EventListener);
+
     return () => {
       socket.off("driver-location", handleDriverLocation);
       socket.off("driver-location", extraHandler);
+      window.removeEventListener("driverNavTarget", handleNavTarget as EventListener);
     };
   }, [rideId]);
 
@@ -592,18 +613,27 @@ export default function PassengerDestinationUpdater({ rideId, pickupAddress, cur
             <div className="mt-2 text-xs text-slate-400">Click any point on the map or search above to choose a new destination.</div>
           </div>
 
-          {driverLocation ? (
+          {driverLocation && navMode === 'pickup' ? (
             <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
               <div className="text-xs uppercase tracking-wide text-slate-400">Driver location</div>
               <div className="mt-2 font-medium text-white">{driverLocation.lat.toFixed(4)}, {driverLocation.lng.toFixed(4)}</div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div className="mt-3">
                 <div className="rounded-md border border-white/10 bg-slate-900/60 p-3">
                   <div className="text-xxs text-slate-300">To pickup</div>
-                  <div className="text-sm font-medium text-white">{routeDistance ? formatMeters(routeDistance) : (routeDistance == null && pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A")} • {routeDuration ? formatMinutes(routeDuration) : "N/A"}</div>
+                  <div className="text-sm font-medium text-white">{pickupRouteDistance ? formatMeters(pickupRouteDistance) : (pickupPoint ? formatMeters(haversineDistance(driverLocation.lat, driverLocation.lng, pickupPoint.lat, pickupPoint.lng)) : "N/A")} • {pickupRouteDuration ? formatMinutes(pickupRouteDuration) : "N/A"}</div>
                 </div>
+              </div>
+            </div>
+          ) : null}
+
+          {driverLocation && navMode === 'destination' ? (
+            <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-400">Driver location</div>
+              <div className="mt-2 font-medium text-white">{driverLocation.lat.toFixed(4)}, {driverLocation.lng.toFixed(4)}</div>
+              <div className="mt-3">
                 <div className="rounded-md border border-white/10 bg-slate-900/60 p-3">
                   <div className="text-xxs text-slate-300">To destination</div>
-                  <div className="text-sm font-medium text-white">{routeDistance ? formatMeters(routeDistance) : "N/A"} • {routeDuration ? formatMinutes(routeDuration) : "N/A"}</div>
+                  <div className="text-sm font-medium text-white">{driverToDestDistance ? formatMeters(driverToDestDistance) : "N/A"} • {driverToDestDuration ? formatMinutes(driverToDestDuration) : "N/A"}</div>
                 </div>
               </div>
             </div>
