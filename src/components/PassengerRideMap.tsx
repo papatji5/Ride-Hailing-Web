@@ -73,7 +73,7 @@ export default function PassengerRideMap({
           maxzoom: 19,
         },
       ],
-    } as const;
+    } as mapboxgl.Style;
     const mapStyle = token ? "mapbox://styles/mapbox/streets-v12" : osmFallbackStyle;
 
     const map = new mapboxgl.Map({

@@ -209,7 +209,7 @@ export default function DriverLocationAutoTracker() {
           maxzoom: 19,
         },
       ],
-    } as const;
+    } as mapboxgl.Style;
     const mapStyle = token ? "mapbox://styles/mapbox/streets-v11" : osmFallbackStyle;
     const map = new mapboxgl.Map({
       container: mapEl.current,
